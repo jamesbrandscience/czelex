@@ -1,0 +1,1507 @@
+---
+title: "CzeLex: A megastudy dataset of concreteness, imageability, age of acquisition, valence and gender ratings for 9,707 Czech words"
+subtitle: "_Supplementary materials: Analysis script_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    collapsed: false
+    df_print: paged
+    code_folding: show
+---
+
+<!-- set the colour scheme of the html file -->
+<style>
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    background-color: #95A044;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(DT.options = list(dom = "ltip"))
+```
+
+## System set-up: Packages, conflicts, session info
+
+```{r message=FALSE, warning=FALSE}
+#load in libraries, if not installed, please make sure you install using install.packages
+library(tidyverse)
+library(lme4)
+# library(ggeffects)
+# library(corrplot)
+library(GGally)
+# library(performance)
+library(ordinal)
+library(brms)
+library(sjPlot)
+library(psychometric)
+library(conflicted)
+# library(plotrix)
+# library(gmodels)
+library(ggpp)
+library(ggridges)
+# library(ggh4x)
+library(DT)
+library(cowplot)
+# library(vwr)
+library(jtools)
+library(olsrr)
+
+#solve common issue with other packages using these function names
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+conflict_prefer("alpha", "ggplot2")
+conflict_prefer("plot_grid", "cowplot")
+
+#check information about R session, this will give details of the R setup on the authors computer at the time of running. If any of the outputs are not reproduced as in the html file produced from this markdown document (see repository), there may be differences in the package versions or setup on your computer. You can update packages by running utils::update.packages()
+sessionInfo()
+
+```
+
+## Load in data
+
+We will load in an unfiltered pre-processed version of the raw data. See CzeLex_norms_preproccessing.Rmd.
+
+```{r message=FALSE}
+#rating data
+czlex_norming_filtered <- read_rds("raw_filtered_data/czelex_raw_filtered_ratings_data.rds")
+
+#demographic data
+czlex_norming_filtered_demographics <- read_rds("raw_filtered_data/czelex_raw_filtered_demographic_data.rds")
+
+#word list variables
+czlex_word_list_variables <- read_csv("additional_data/czlex_word_list_variables.csv")
+
+#lexical decision data
+czlex_ldt <- read_rds("additional_data/czlex_ldt_summaries.rds")
+
+```
+
+## Description of data
+
+```{r}
+czlex_norming_filtered_demographics %>%
+  group_by(gender) %>%
+  count()
+
+czlex_norming_filtered_demographics %>%
+  summarise(median_age = median(age),
+            sd_age = sd(age),
+            min_age = min(age),
+            max_age = max(age))
+
+```
+
+
+```{r}
+czlex_norming_filtered %>%
+  summarise(n_row = n()) %>%
+  bind_cols(czlex_norming_filtered %>%
+              summarise(n_items = n_distinct(name),
+                        n_dimensions = n_distinct(dimension))) %>%
+  bind_cols(czlex_norming_filtered_demographics %>%
+              summarise(n_ppts = n_distinct(subject),
+                        mean_age = mean(age),
+                        sd_age = sd(age),
+                        median_age = median(age)))
+
+czlex_norming_filtered_demographics %>%
+  group_by(gender) %>%
+  summarise(n_ppts = n(),
+            mean_age = mean(age),
+            sd_age = sd(age),
+            median_age = median(age),
+            mean_gender = mean(gender_scale))
+
+czlex_norming_filtered %>%
+  group_by(dimension) %>%
+  summarise(mean = mean(value1, na.rm = TRUE),
+            sd = sd(value1, na.rm = TRUE),
+            median = median(value1, na.rm = TRUE),
+            min = min(value1, na.rm = TRUE),
+            max = max(value1, na.rm = TRUE))
+
+```
+
+### Reliability
+
+We will assess reliability of the ratings along each of the dimensions. Namely, we will employ one-way intra-class correlation coefficients based on Brysbaert (2019)
+
+ICC2
+
+```{r}
+for (i in unique(czlex_norming_filtered$dimension)) {
+  
+  mod1 <- lme(value1 ~ 1, random=~1|name, data = czlex_norming_filtered %>%
+                filter(dimension == i),
+              na.action=na.omit,
+              control = lmeControl(opt = "optim"))
+  
+  cat(i, " ICC2 mean: ", mean(gmeanrel(mod1)$MeanRel), "\n")
+  cat(i, " ICC2 weighted mean: ", weighted.mean(gmeanrel(mod1)$MeanRel, gmeanrel(mod1)$GrpSize), "\n\n")
+  
+  remove(mod1)
+
+}
+
+```
+
+## Summary data
+
+### Traditional descriptive statistics
+
+First, we calculate the mean, SD, number of responses overall, number of responses where the word was known and the proportion of known responses, for each of the words across the dimensions.
+
+```{r}
+czlex_summary <- czlex_norming_filtered %>%
+  group_by(name, dimension) %>%
+  summarise(mean = mean(value1, na.rm = TRUE),
+            sd = sd(value1, na.rm = TRUE),
+            n = n(),
+            n_known = sum(value_known),
+            prop_known = n_known/n) %>%
+  arrange(dimension, name)
+
+czlex_summary %>%
+  mutate(across(where(is.numeric), ~round(., 2))) %>%
+  datatable(filter = 'top')
+
+```
+
+We will create a summary table in a wide format.
+
+```{r}
+czlex_summary_wide <- czlex_summary %>% 
+  ungroup() %>% 
+  pivot_wider(names_from  = dimension, values_from = c(mean, sd, n, n_known, prop_known))
+
+czlex_summary_wide %>%
+  mutate(across(where(is.numeric), ~round(., 2))) %>%
+  datatable(filter = 'top')
+
+```
+
+Descriptive statistics: grand mean, standard deviation, minimum and maximum per dimension
+
+```{r}
+czlex_summary %>%
+  group_by(dimension) %>% 
+  summarise(Mean = mean(mean),
+            SD = sd(mean),
+            Min = min(mean),
+            Max = max(mean))
+
+```
+
+Visualise the summary data
+
+```{r fig.height=2.5, fig.width=10}
+czlex_ratings_summary_label1 <- tibble(dimension = rep(unique(czlex_summary$dimension), 2),
+                                       mean = c(0, 1, -3, 1, -3, 22, 5, 3, 7, 3),
+                                       mean1a = c(rep(0, 5), rep(1, 5)),
+                                       colour1 = c(rep("#2c7fb8", 5), rep("#f03b20", 5)),
+                                       hjust = c(rep(0, 5), rep(1, 5)),
+                                       label = c("early", "abstr", "masc", "diff","neg",
+                                                     "late", "conc", "fem", "easy", "pos"),
+                                       version = rep("", 10)
+                                       ) %>%
+  left_join(czlex_summary %>%
+              group_by(dimension) %>%
+              summarise(mean2 = mean(mean),
+                        median = median(mean),
+                        sd = sd(mean),
+                        n = n())) %>%
+  ungroup()
+
+czlex_ratings_summary_label1a <- tibble(
+  dimension = c(rep("aoa", 5), rep("concreteness", 5), rep("gender", 7), rep("imageability", 7), rep("valence", 7)),
+                                        scale1 = c(seq(0, 22, 5), seq(1, 5, 1), seq(-3, 3, 1), seq(1, 7, 1), seq(-3, 3, 1)))
+
+for (i in unique(czlex_summary$dimension)) {
+  
+  descriptive_plot1 <- czlex_summary %>%
+  mutate(version = "") %>%
+  filter(dimension == i)
+  
+  czlex_ratings_summary_label2 <- czlex_ratings_summary_label1 %>%
+               filter(dimension == i)
+  
+  czlex_ratings_summary_label2a <- czlex_ratings_summary_label1a %>%
+               filter(dimension == i)
+  
+  descriptive_plot <- descriptive_plot1 %>%
+  ggplot(aes(x = mean, y = version, colour = mean)) +
+  geom_density_ridges(colour = "black",
+                       fill = NA,
+                       scale = 0.8,
+                       quantile_lines = TRUE,
+                       quantiles = c(0.25, 0.5, 0.75),
+                       vline_color = c("black")) +
+  geom_point(position = position_jitternudge(height = 0.1,
+                                             nudge.from = "jittered",
+                                             y = -0.2),
+             size = 0.1,
+             alpha = 0.4) +
+  geom_label(data = czlex_ratings_summary_label2,
+              aes(x = mean, y = version, label = label, fill = colour1, hjust = hjust, vjust = 4),
+             position = position_nudge(y = -0.08),
+             inherit.aes = FALSE) +
+  geom_linerange(data = czlex_ratings_summary_label2,
+                  aes(y = version, xmin = mean2 - sd, xmax = mean2 + sd),
+                  colour = "black",
+                  size = 0.5,
+                  position = position_nudge(y = -0.05),
+                 inherit.aes = FALSE) +
+  geom_point(data = czlex_ratings_summary_label2,
+              aes(x = mean2, y = version),
+              colour = "black",
+              size = 2,
+              position = position_nudge(y = -0.05),
+             inherit.aes = FALSE) +
+  geom_text(data = czlex_ratings_summary_label2 %>%
+              slice_min(mean),
+            aes(x = min(mean), y = 1.57, label = paste0("n = ", unique(n), "\nmean = ", round(unique(mean2), 2), "\nSD = ", round(unique(sd), 2))),
+            size = 2.5,
+            hjust = 0,
+            vjust = 1,
+            inherit.aes = FALSE) +
+  scale_colour_gradient2(low = "#2c7fb8",
+                         mid = "#ffffbf",
+                         high = "#f03b20",
+                         midpoint = unique(czlex_ratings_summary_label2$mean2)) +
+  scale_fill_manual(values = alpha(c("#2c7fb8", "#f03b20"), .3)) +
+  scale_x_continuous(limits = c(min(czlex_ratings_summary_label2$mean),
+                                max(czlex_ratings_summary_label2$mean)),
+                      breaks = czlex_ratings_summary_label2a$scale1) +
+  facet_grid(~dimension) +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+  
+  assign(paste0(i, "_descriptive_plot"), descriptive_plot)
+  
+}
+
+descriptive_plot_all <- plot_grid(aoa_descriptive_plot,
+                                  concreteness_descriptive_plot,
+                                  gender_descriptive_plot,
+                                  imageability_descriptive_plot,
+                                  valence_descriptive_plot,
+                                  nrow = 1)
+
+descriptive_plot_all
+
+ggsave(plot = descriptive_plot_all, filename = "plots/descriptive_plot_all.png", height = 2.5, width = 10, dpi = 400)
+
+remove(czlex_ratings_summary_label1,
+       czlex_ratings_summary_label1a,
+       czlex_ratings_summary_label2,
+       czlex_ratings_summary_label2a,
+       descriptive_plot1,
+       descriptive_plot,
+       aoa_descriptive_plot,
+       concreteness_descriptive_plot,
+       gender_descriptive_plot,
+       imageability_descriptive_plot,
+       valence_descriptive_plot)
+
+```
+
+### Latent means using CLMM
+
+Traditionally norms are summarised by the mean and SD. However, an alternative is presented by Taylor et al. (2021), who highlight that means are not always suitable for ordinal data, which our data is. We follow the advice of Taylor et al. and use cumulative link mixed models to extract the estimates for each word from models predicting the raw ratings, whilst also accounting for random variation from participant rating biases.
+
+Taylor, J. E., Rousselet, G. A., Scheepers, C., & Sereno, S. C. (2021, August 3). Rating Norms Should be Calculated from Cumulative Link Mixed Effects Models. https://doi.org/10.31234/osf.io/3vgwk
+
+We will convert the ratings to an ordered factor and then model the data using clmms for each dimension.
+
+Note that for AoA we will not run this, a preliminary attempt at this led to major issues with the modelling. Although AoA values could be interpreted as ordinal, they appear not be suited for this type of modelling, even though there is a large amount of data.
+
+We have also set the below chunks to not be evaluated in this document, as the can take some time to run. For efficiency, we extract the interception and stored them as a csv file, which can be quickly read in.
+
+#### clmms
+
+Concreteness
+
+```{r eval=FALSE}
+czlex_norming_filtered_concreteness <- czlex_norming_filtered %>%
+  filter(dimension == "concreteness") %>%
+  mutate(value1 = factor(value1, ordered = TRUE))
+
+system.time(
+  m_concreteness <- clmm(value1 ~ 1 + (1|name) + (1|subject),
+                         data = czlex_norming_filtered_concreteness,
+                         link = "probit")
+  )
+
+clmm_estimates_concreteness <- ranef(m_concreteness)$name %>%
+  # store the item IDs in the item_id column rather than in row names
+  as_tibble(rownames = "name") %>%
+  # rename the random effects variable to something more informative than "(Intercept)"
+  rename(clmm_concreteness = `(Intercept)`)
+
+saveRDS(m_concreteness, file = "clmm_models/mods/concreteness_clmm.rds")
+write_excel_csv(clmm_estimates_concreteness, file = "clmm_models/concreteness_clmm.csv")
+
+```
+
+Gender
+
+```{r eval=FALSE}
+czlex_norming_filtered_gender <- czlex_norming_filtered %>%
+  filter(dimension == "gender") %>%
+  mutate(value1 = factor(value1, ordered = TRUE))
+
+system.time(
+  m_gender <- clmm(value1 ~ 1 + (1|name) + (1|subject),
+                         data = czlex_norming_filtered_gender,
+                         link = "probit")
+  )
+
+clmm_estimates_gender <- ranef(m_gender)$name %>%
+  # store the item IDs in the item_id column rather than in row names
+  as_tibble(rownames = "name") %>%
+  # rename the random effects variable to something more informative than "(Intercept)"
+  rename(clmm_gender = `(Intercept)`)
+
+saveRDS(m_gender, file = "clmm_models/mods/gender_clmm.rds")
+write_excel_csv(clmm_estimates_gender, file = "clmm_models/gender_clmm.csv")
+
+```
+
+Imageability
+
+```{r eval=FALSE}
+czlex_norming_filtered_imageability <- czlex_norming_filtered %>%
+  filter(dimension == "imageability") %>%
+  mutate(value1 = factor(value1, ordered = TRUE))
+
+system.time(
+  m_imageability <- clmm(value1 ~ 1 + (1|name) + (1|subject),
+                         data = czlex_norming_filtered_imageability,
+                         link = "probit")
+  )
+
+clmm_estimates_imageability <- ranef(m_imageability)$name %>%
+  # store the item IDs in the item_id column rather than in row names
+  as_tibble(rownames = "name") %>%
+  # rename the random effects variable to something more informative than "(Intercept)"
+  rename(clmm_imageability = `(Intercept)`)
+
+saveRDS(m_imageability, file = "clmm_models/mods/imageability_clmm.rds")
+write_excel_csv(clmm_estimates_imageability, file = "clmm_models/imageability_clmm.csv")
+
+```
+
+Valence
+
+```{r eval=FALSE}
+czlex_norming_filtered_valence <- czlex_norming_filtered %>%
+  filter(dimension == "valence") %>%
+  mutate(value1 = factor(value1, ordered = TRUE))
+
+system.time(
+  m_valence <- clmm(value1 ~ 1 + (1|name) + (1|subject),
+                         data = czlex_norming_filtered_valence,
+                         link = "probit")
+  )
+
+clmm_estimates_valence <- ranef(m_valence)$name %>%
+  # store the item IDs in the item_id column rather than in row names
+  as_tibble(rownames = "name") %>%
+  # rename the random effects variable to something more informative than "(Intercept)"
+  rename(clmm_valence = `(Intercept)`)
+
+saveRDS(m_valence, file = "clmm_models/mods/valence_clmm.rds")
+write_excel_csv(clmm_estimates_valence, file = "clmm_models/valence_clmm.csv")
+
+```
+
+```{r message=FALSE}
+clmm_estimates_concreteness <- read_csv("clmm_models/concreteness_clmm.csv")
+clmm_estimates_gender <- read_csv("clmm_models/gender_clmm.csv")
+clmm_estimates_imageability <- read_csv("clmm_models/imageability_clmm.csv")
+clmm_estimates_valence <- read_csv("clmm_models/valence_clmm.csv")
+
+```
+
+Merge all the data
+
+```{r}
+czlex_summary_clmm <- czlex_summary_wide %>%
+  select(name) %>%
+  left_join(clmm_estimates_concreteness) %>%
+  left_join(clmm_estimates_gender) %>%
+  left_join(clmm_estimates_imageability) %>%
+  left_join(clmm_estimates_valence)
+
+```
+
+#### brms
+
+In the next sections, we will run a Bayesian model for each of the dimensions. These will operate in a very similar way to the clmm models above, i.e. they will be fitting the data in an ordinal way. However, we will also be adding in a model that provides with a latent SD estimate, this is the disc variable in the model, following Taylor et al's (2023) approach. As these models take a long time to run, we have set the below chunks to be not evaluated, to save time, each of them took approximately 14 hours to run and the resulting models are approximately 2.5GBIn size. We therefore extract all of the intercepts for the items and store them as CSV files for ease.
+
+Concreteness
+
+```{r eval=FALSE}
+czlex_norming_filtered_concreteness <- czlex_norming_filtered %>%
+  filter(dimension  == "concreteness") %>%
+  mutate(rating = factor(value1, levels = 1:5, ordered = TRUE)) %>%
+  mutate(name1 = str_replace_all(name, " ", "."))
+
+system.time(
+  m_concreteness <- brm(
+    brmsformula(
+      rating ~ 1 + (1|name) + (1|subject),
+      disc ~ 0 + (1|name) + (1|subject)
+    ),
+    data = czlex_norming_filtered_concreteness,
+    family = cumulative("probit"),
+    chains = 6,
+    cores = 6,
+    iter = 4000,
+    control = list(
+      adapt_delta = 0.95,
+      max_treedepth = 10
+    ),
+    init = "0",
+    file = file.path("brms_models/mods", "concreteness_m1.rds"),
+    refresh = 100,
+    seed = 3101,
+    thin = 2
+  )
+)
+
+item_estimates_concreteness <- map_df(unique(czlex_norming_filtered_concreteness$name1), function(i) {
+  # on each iteration, create the strings to look up this item's random effects
+  mu_re <- sprintf("r_name[%s,Intercept]", i)
+  disc_re <- sprintf("r_name__disc[%s,Intercept]", i)
+  # extract posterior samples for the random effects parameters, and calculate the median to get the estimate
+  as_draws_df(m_concreteness, c(mu_re, disc_re)) %>%
+    rename(mu = 1, disc = 2) %>%
+    mutate(sd = 1/exp(disc)) %>%
+    summarise(
+      name = i,
+      latent_mean_concreteness = median(mu),
+      latent_disc_concreteness = median(disc),
+      latent_sd_concreteness = median(sd)
+    )
+}) %>%
+  rename(brms_concreteness = latent_mean_concreteness) %>%
+  mutate(name = ifelse(!str_detect(name, "\\."), name,
+                                   ifelse(str_detect(name, "\\.cz|\\.com"), name,
+                                          ifelse(name == "SEV.en.energy", "SEV.en energy", str_replace_all(name, "\\.", " ")))))
+
+rm(m_concreteness)
+
+write_excel_csv(item_estimates_concreteness %>%
+                  arrange(name),
+                "brms_models/concreteness_brms.csv")
+
+```
+
+Gender
+
+```{r eval=FALSE}
+czlex_norming_filtered_gender <- czlex_norming_filtered %>%
+  filter(dimension  == "gender") %>%
+  mutate(rating = factor(value1, levels = -3:3, ordered = TRUE)) %>%
+  mutate(name1 = str_replace_all(name, " ", "."))
+
+system.time(
+  m_gender <- brm(
+    brmsformula(
+      rating ~ 1 + (1|name) + (1|subject),
+      disc ~ 0 + (1|name) + (1|subject)
+    ),
+    data = czlex_norming_filtered_gender,
+    family = cumulative("probit"),
+    chains = 6,
+    cores = 6,
+    iter = 4000,
+    control = list(
+      adapt_delta = 0.95,
+      max_treedepth = 10
+    ),
+    init = "0",
+    file = file.path("brms_models/mods", "gender_m1.rds"),
+    refresh = 100,
+    seed = 3101,
+    thin = 2
+  )
+)
+
+item_estimates_gender <- map_df(unique(czlex_norming_filtered_gender$name1), function(i) {
+  # on each iteration, create the strings to look up this item's random effects
+  mu_re <- sprintf("r_name[%s,Intercept]", i)
+  disc_re <- sprintf("r_name__disc[%s,Intercept]", i)
+  # extract posterior samples for the random effects parameters, and calculate the median to get the estimate
+  as_draws_df(m_gender, c(mu_re, disc_re)) %>%
+    rename(mu = 1, disc = 2) %>%
+    mutate(sd = 1/exp(disc)) %>%
+    summarise(
+      name = i,
+      latent_mean_gender = median(mu),
+      latent_disc_gender = median(disc),
+      latent_sd_gender = median(sd)
+    )
+}) %>%
+  rename(brms_gender = latent_mean_gender) %>%
+  mutate(name = ifelse(!str_detect(name, "\\."), name,
+                                   ifelse(str_detect(name, "\\.cz|\\.com"), name,
+                                          ifelse(name == "SEV.en.energy", "SEV.en energy", str_replace_all(name, "\\.", " ")))))
+
+rm(m_gender)
+
+write_excel_csv(item_estimates_gender %>%
+                  arrange(name),
+                "brms_models/gender_brms.csv")
+
+```
+
+Imageability
+
+```{r eval=FALSE}
+czlex_norming_filtered_imageability <- czlex_norming_filtered %>%
+  filter(dimension  == "imageability") %>%
+  mutate(rating = factor(value1, levels = 1:7, ordered = TRUE)) %>%
+  mutate(name1 = str_replace_all(name, " ", "."))
+
+system.time(
+  m_imageability <- brm(
+    brmsformula(
+      rating ~ 1 + (1|name) + (1|subject),
+      disc ~ 0 + (1|name) + (1|subject)
+    ),
+    data = czlex_norming_filtered_imageability,
+    family = cumulative("probit"),
+    chains = 6,
+    cores = 6,
+    iter = 4000,
+    control = list(
+      adapt_delta = 0.95,
+      max_treedepth = 10
+    ),
+    init = "0",
+    file = file.path("brms_models/mods", "imageability_m1.rds"),
+    refresh = 100,
+    seed = 3101,
+    thin = 2
+  )
+)
+
+item_estimates_imageability <- map_df(unique(czlex_norming_filtered_imageability$name1), function(i) {
+  # on each iteration, create the strings to look up this item's random effects
+  mu_re <- sprintf("r_name[%s,Intercept]", i)
+  disc_re <- sprintf("r_name__disc[%s,Intercept]", i)
+  # extract posterior samples for the random effects parameters, and calculate the median to get the estimate
+  as_draws_df(m_imageability, c(mu_re, disc_re)) %>%
+    rename(mu = 1, disc = 2) %>%
+    mutate(sd = 1/exp(disc)) %>%
+    summarise(
+      name = i,
+      latent_mean_imageability = median(mu),
+      latent_disc_imageability = median(disc),
+      latent_sd_imageability = median(sd)
+    )
+}) %>%
+  rename(brms_imageability = latent_mean_imageability) %>%
+  mutate(name = ifelse(!str_detect(name, "\\."), name,
+                                   ifelse(str_detect(name, "\\.cz|\\.com"), name,
+                                          ifelse(name == "SEV.en.energy", "SEV.en energy", str_replace_all(name, "\\.", " ")))))
+
+rm(m_imageability)
+
+write_excel_csv(item_estimates_imageability %>%
+                  arrange(name),
+                "brms_models/imageability_brms.csv")
+
+```
+
+Valence
+
+```{r eval=FALSE}
+czlex_norming_filtered_valence <- czlex_norming_filtered %>%
+  filter(dimension  == "valence") %>%
+  mutate(rating = factor(value1, levels = -3:3, ordered = TRUE)) %>%
+  mutate(name1 = str_replace_all(name, " ", "."))
+
+system.time(
+  m_valence <- brm(
+    brmsformula(
+      rating ~ 1 + (1|name) + (1|subject),
+      disc ~ 0 + (1|name) + (1|subject)
+    ),
+    data = czlex_norming_filtered_valence,
+    family = cumulative("probit"),
+    chains = 6,
+    cores = 6,
+    iter = 4000,
+    control = list(
+      adapt_delta = 0.95,
+      max_treedepth = 10
+    ),
+    init = "0",
+    file = file.path("brms_models/mods", "valence_m1.rds"),
+    refresh = 100,
+    seed = 3101,
+    thin = 2
+  )
+)
+
+item_estimates_valence <- map_df(unique(czlex_norming_filtered_valence$name1), function(i) {
+  # on each iteration, create the strings to look up this item's random effects
+  mu_re <- sprintf("r_name[%s,Intercept]", i)
+  disc_re <- sprintf("r_name__disc[%s,Intercept]", i)
+  # extract posterior samples for the random effects parameters, and calculate the median to get the estimate
+  as_draws_df(m_valence, c(mu_re, disc_re)) %>%
+    rename(mu = 1, disc = 2) %>%
+    mutate(sd = 1/exp(disc)) %>%
+    summarise(
+      name = i,
+      latent_mean_valence = median(mu),
+      latent_disc_valence = median(disc),
+      latent_sd_valence = median(sd)
+    )
+}) %>%
+  rename(brms_valence = latent_mean_valence) %>%
+  mutate(name = ifelse(!str_detect(name, "\\."), name,
+                                   ifelse(str_detect(name, "\\.cz|\\.com"), name,
+                                          ifelse(name == "SEV.en.energy", "SEV.en energy", str_replace_all(name, "\\.", " ")))))
+
+rm(m_valence)
+
+write_excel_csv(item_estimates_valence %>%
+                  arrange(name),
+                "brms_models/valence_brms.csv")
+
+```
+
+Merge all the data
+
+```{r message=FALSE}
+brms_concreteness_estimates <- read_csv("brms_models/concreteness_brms.csv")
+brms_gender_estimates <- read_csv("brms_models/gender_brms.csv")
+brms_imageability_estimates <- read_csv("brms_models/imageability_brms.csv")
+brms_valence_estimates <- read_csv("brms_models/valence_brms.csv")
+
+czlex_summary_brms <- czlex_summary_wide %>%
+  select(name) %>%
+  left_join(brms_concreteness_estimates) %>%
+  left_join(brms_gender_estimates) %>%
+  left_join(brms_imageability_estimates) %>%
+  left_join(brms_valence_estimates)
+
+```
+
+#### Merge all estimates together
+
+```{r}
+czlex_summary_clmm_brms <- czlex_summary_wide %>%
+  left_join(czlex_summary_clmm) %>%
+  left_join(czlex_summary_brms)
+
+write_excel_csv(czlex_summary_clmm_brms, "czelex_summary_data.csv")
+
+```
+
+## Comparison of methods
+
+In the below sections, we will be exploring whether the three different aggregation methods are related to each other. We will do this based on the item level estimates, looking at the mean, clmm and brms estimates. Similarly, we will also explore whether the variance estimates that have been derived from the SD and the latent SD from the brms models also have a clear relationship to the means and latent means, as well as to each other.
+
+Item level estimates
+
+```{r fig.height=6, fig.width=6, warning=FALSE}
+czlex_summary_clmm_brms_comparison <- czlex_summary_clmm_brms %>%
+  select(name, starts_with("mean_")) %>%
+  pivot_longer(-name, names_to = "dimension", values_to = "mean") %>%
+  mutate(dimension = str_remove(dimension, "mean_")) %>%
+  left_join(czlex_summary_clmm_brms %>%
+              select(name, starts_with("clmm_")) %>%
+              pivot_longer(-name, names_to = "dimension", values_to = "clmm") %>%
+              mutate(dimension = str_remove(dimension, "clmm_"))) %>%
+  rename(x = mean,
+         y = clmm) %>%
+  mutate(comparison = "mean~clmm") %>%
+  bind_rows(czlex_summary_clmm_brms %>%
+              select(name, starts_with("mean_")) %>%
+              pivot_longer(-name, names_to = "dimension", values_to = "mean") %>%
+              mutate(dimension = str_remove(dimension, "mean_")) %>%
+              left_join(czlex_summary_clmm_brms %>%
+                          select(name, starts_with("brms_")) %>%
+                          pivot_longer(-name, names_to = "dimension", values_to = "brms") %>%
+                          mutate(dimension = str_remove(dimension, "brms_"))) %>%
+              rename(x = mean,
+                     y = brms) %>%
+              mutate(comparison = "mean~brms")) %>%
+  bind_rows(czlex_summary_clmm_brms %>%
+              select(name, starts_with("clmm_")) %>%
+              pivot_longer(-name, names_to = "dimension", values_to = "clmm") %>%
+              mutate(dimension = str_remove(dimension, "clmm_")) %>%
+              left_join(czlex_summary_clmm_brms %>%
+                          select(name, starts_with("brms_")) %>%
+                          pivot_longer(-name, names_to = "dimension", values_to = "brms") %>%
+                          mutate(dimension = str_remove(dimension, "brms_"))) %>%
+              rename(x = clmm,
+                     y = brms) %>%
+              mutate(comparison = "clmm~brms")) %>%
+  mutate(comparison = factor(comparison, ordered = TRUE, levels = c("mean~clmm", "mean~brms", "clmm~brms"))) %>%
+  filter(dimension != "aoa")
+
+czlex_summary_clmm_brms_comparison_cor <- czlex_summary_clmm_brms_comparison %>%
+  group_by(dimension, comparison) %>%
+  summarise(cor = cor(x, y, use = "pairwise")) %>%
+  ungroup() %>%
+  mutate(cor1 = paste0("r = ", format(round(cor, 3), nsmall = 3)),
+         cor1 = str_replace(cor1, "0.", "."))
+
+```
+
+
+```{r fig.height=6, fig.width=7, warning=FALSE}
+czlex_summary_clmm_brms_comparison1 <- czlex_summary_clmm_brms_comparison %>%
+  filter(comparison == "mean~clmm") %>%
+  ggplot(aes(x = x, y = y)) +
+  geom_point(size = 0.1, alpha = 0.1) +
+  geom_smooth(method = "lm") +
+  geom_smooth(method = "loess", colour = "red", size = 0.5, linetype = 2) +
+  geom_label(data = czlex_summary_clmm_brms_comparison_cor %>%
+              filter(comparison == "mean~clmm"),
+            aes(x = -Inf, y = Inf, label = cor1),
+            hjust = 0, vjust = 1, border.colour = "white", fill = alpha(c("white"), 0)) +
+  xlab("mean") +
+  ylab("clmm") +
+  facet_grid(comparison~dimension, scales = "free") +
+  theme_bw()
+
+czlex_summary_clmm_brms_comparison2 <- czlex_summary_clmm_brms_comparison %>%
+  filter(comparison == "mean~brms") %>%
+  ggplot(aes(x = x, y = y)) +
+  geom_point(size = 0.1, alpha = 0.1) +
+  geom_smooth(method = "lm") +
+  geom_smooth(method = "loess", colour = "red", size = 0.5, linetype = 2) +
+  geom_label(data = czlex_summary_clmm_brms_comparison_cor %>%
+              filter(comparison == "mean~brms"),
+            aes(x = -Inf, y = Inf, label = cor1),
+            hjust = 0, vjust = 1, border.colour = "white", fill = alpha(c("white"), 0)) +
+  xlab("mean") +
+  ylab("brms") +
+  facet_grid(comparison~dimension, scales = "free") +
+  theme_bw() +
+  theme(strip.text.x = element_blank(),
+        strip.background.x = element_blank())
+
+czlex_summary_clmm_brms_comparison3 <- czlex_summary_clmm_brms_comparison %>%
+  filter(comparison == "clmm~brms") %>%
+  ggplot(aes(x = x, y = y)) +
+  geom_point(size = 0.1, alpha = 0.1) +
+  geom_smooth(method = "lm") +
+  geom_smooth(method = "loess", colour = "red", size = 0.5, linetype = 2) +
+  geom_label(data = czlex_summary_clmm_brms_comparison_cor %>%
+              filter(comparison == "clmm~brms"),
+            aes(x = -Inf, y = Inf, label = cor1),
+            hjust = 0, vjust = 1, border.colour = "white", fill = alpha(c("white"), 0)) +
+  xlab("clmm") +
+  ylab("brms") +
+  facet_grid(comparison~dimension, scales = "free") +
+  theme_bw() +
+  theme(strip.text.x = element_blank(),
+        strip.background.x = element_blank())
+
+czlex_summary_clmm_brms_comparison_plot <- plot_grid(czlex_summary_clmm_brms_comparison1,
+          czlex_summary_clmm_brms_comparison2,
+          czlex_summary_clmm_brms_comparison3,
+          labels = c("A", "B", "C"),
+          nrow = 3, ncol = 1, rel_heights = c(1, 0.9, 0.9))
+
+czlex_summary_clmm_brms_comparison_plot
+
+ggsave(plot = czlex_summary_clmm_brms_comparison_plot, filename = "plots/summary_data_comparison.png", width = 7, height = 6, dpi = 400)
+
+```
+
+Item level variance
+
+```{r}
+czlex_summary_clmm_brms_comparison_sd <- czlex_summary_clmm_brms %>%
+  select(name, starts_with("brms_")) %>%
+  pivot_longer(-name, names_to = "dimension", values_to = "item estimate") %>%
+  mutate(dimension = str_remove(dimension, "brms_")) %>%
+  left_join(czlex_summary_clmm_brms %>%
+              select(name, starts_with("sd_")) %>%
+              pivot_longer(-name, names_to = "dimension", values_to = "sd") %>%
+              mutate(dimension = str_remove(dimension, "sd_"))) %>%
+  rename(x = `item estimate`,
+         y = sd) %>%
+  mutate(comparison = "brms~variance",
+         estimate = "brms",
+         variance = "SD") %>%
+  bind_rows(czlex_summary_clmm_brms %>%
+              select(name, starts_with("brms_")) %>%
+              pivot_longer(-name, names_to = "dimension", values_to = "item estimate") %>%
+              mutate(dimension = str_remove(dimension, "brms_")) %>%
+              left_join(czlex_summary_clmm_brms %>%
+                          select(name, starts_with("latent_sd")) %>%
+                          pivot_longer(-name, names_to = "dimension", values_to = "latent_sd") %>%
+                          mutate(dimension = str_remove(dimension, "latent_sd_"))) %>%
+              rename(x = `item estimate`,
+                     y = latent_sd) %>%
+              mutate(comparison = "brms~variance",
+                     estimate = "brms",
+                     variance = "Latent SD")) %>%
+  bind_rows(czlex_summary_clmm_brms %>%
+              select(name, starts_with("mean_")) %>%
+              pivot_longer(-name, names_to = "dimension", values_to = "item estimate") %>%
+              mutate(dimension = str_remove(dimension, "mean_")) %>%
+              left_join(czlex_summary_clmm_brms %>%
+                          select(name, starts_with("sd_")) %>%
+                          pivot_longer(-name, names_to = "dimension", values_to = "sd") %>%
+                          mutate(dimension = str_remove(dimension, "sd_"))) %>%
+              rename(x = `item estimate`,
+                     y = sd) %>%
+              mutate(comparison = "mean~variance",
+                     estimate = "mean",
+                     variance = "SD")) %>%
+  bind_rows(czlex_summary_clmm_brms %>%
+              select(name, starts_with("mean_")) %>%
+              pivot_longer(-name, names_to = "dimension", values_to = "item estimate") %>%
+              mutate(dimension = str_remove(dimension, "mean_")) %>%
+              left_join(czlex_summary_clmm_brms %>%
+                          select(name, starts_with("latent_sd")) %>%
+                          pivot_longer(-name, names_to = "dimension", values_to = "latent_sd") %>%
+                          mutate(dimension = str_remove(dimension, "latent_sd_"))) %>%
+              rename(x = `item estimate`,
+                     y = latent_sd) %>%
+              mutate(comparison = "mean~variance",
+                     estimate = "mean",
+                     variance = "Latent SD")) %>%
+  bind_rows(czlex_summary_clmm_brms %>%
+              select(name, starts_with("sd_")) %>%
+              pivot_longer(-name, names_to = "dimension", values_to = "sd") %>%
+              mutate(dimension = str_remove(dimension, "sd_")) %>%
+              left_join(czlex_summary_clmm_brms %>%
+                          select(name, starts_with("latent_sd")) %>%
+                          pivot_longer(-name, names_to = "dimension", values_to = "latent_sd") %>%
+                          mutate(dimension = str_remove(dimension, "latent_sd_"))) %>%
+              rename(x = sd,
+                     y = latent_sd) %>%
+              mutate(comparison = "SD~latent SD")) %>%
+  mutate(comparison = factor(comparison, ordered = TRUE, levels = c("mean~variance", "brms~variance", "SD~latent SD"))) %>%
+  filter(dimension != "aoa")
+
+czlex_summary_clmm_brms_comparison_cor_sd <- czlex_summary_clmm_brms_comparison_sd %>%
+  group_by(dimension, comparison) %>%
+  summarise(cor = cor(x, y, use = "pairwise")) %>%
+  ungroup() %>%
+  mutate(cor1 = paste0("r = ", format(round(cor, 3), nsmall = 3)),
+         cor1 = str_replace(cor1, "0.", "."))
+
+```
+
+```{r fig.height=7, fig.width=5, warning=FALSE}
+czlex_summary_sd_comparison1 <- czlex_summary_clmm_brms_comparison_sd %>%
+  filter(comparison == "mean~variance") %>%
+  ggplot(aes(x = x, y = y, colour = variance)) +
+  geom_point(size = 0.02, alpha = 0.02) +
+  # geom_smooth(method = "lm") +
+  geom_smooth(method = "loess", size = 0.5, linetype = 2) +
+  # geom_label(data = czlex_summary_clmm_brms_comparison_cor_sd %>%
+  #             filter(comparison == "mean~sd"),
+  #           aes(x = -Inf, y = Inf, label = cor1),
+  #           hjust = 0, vjust = 1, border.colour = "white", fill = alpha(c("white"), 0)) +
+  xlab("Mean") +
+  ylab("Variance") +
+  facet_grid(variance~dimension, scales = "free_x") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+czlex_summary_sd_comparison2 <- czlex_summary_clmm_brms_comparison_sd %>%
+  filter(comparison == "brms~variance") %>%
+  ggplot(aes(x = x, y = y, colour = variance)) +
+  geom_point(size = 0.02, alpha = 0.02) +
+  # geom_smooth(method = "lm") +
+  geom_smooth(method = "loess", size = 0.5, linetype = 2) +
+  # geom_label(data = czlex_summary_clmm_brms_comparison_cor_sd %>%
+  #             filter(comparison == "mean~sd"),
+  #           aes(x = -Inf, y = Inf, label = cor1),
+  #           hjust = 0, vjust = 1, border.colour = "white", fill = alpha(c("white"), 0)) +
+  xlab("brms") +
+  ylab("variance") +
+  facet_grid(variance~dimension) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+czlex_summary_sd_comparison3 <- czlex_summary_clmm_brms_comparison_sd %>%
+  filter(comparison == "SD~latent SD") %>%
+  ggplot(aes(x = x, y = y)) +
+  geom_point(size = 0.02, alpha = 0.02) +
+  # geom_smooth(method = "lm") +
+  geom_smooth(method = "loess", colour = "black", size = 0.5, linetype = 2) +
+  # geom_label(data = czlex_summary_clmm_brms_comparison_cor_sd %>%
+  #             filter(comparison == "sd~latent_sd"),
+  #           aes(x = -Inf, y = Inf, label = cor1),
+  #           hjust = 0, vjust = 1, border.colour = "white", fill = alpha(c("white"), 0)) +
+  xlab("SD") +
+  ylab("latent SD") +
+  facet_grid(comparison~dimension) +
+  theme_bw() +
+  theme(strip.text.x = element_blank(),
+        strip.background.x = element_blank())
+
+czlex_summary_sd_comparison_plot <- plot_grid(czlex_summary_sd_comparison1,
+          czlex_summary_sd_comparison2,
+          czlex_summary_sd_comparison3,
+          labels = c("A", "B", "C"),
+          nrow = 3, ncol = 1, rel_heights = c(1, 1, 0.6))
+
+czlex_summary_sd_comparison_plot
+
+ggsave(plot = czlex_summary_sd_comparison_plot, filename = "plots/sd_data_comparison.png", width = 5, height = 7, dpi = 400)
+
+```
+
+## Correlations
+
+```{r}
+cor_data <- czlex_summary_clmm_brms %>%
+  select(name, starts_with("mean_")) %>%
+  left_join(czlex_word_list_variables %>%
+              select(-frequency))
+
+```
+
+```{r warning=FALSE, message=FALSE, fig.height=10, fig.width=10}
+scatter_reg_curve <- function(data, mapping, ...) {
+  ggplot(data = data, mapping = mapping) +
+    geom_point(size = 0.05, alpha = 0.05) +
+    geom_smooth(method = "lm", colour = "blue", se = FALSE, size = 0.7) + # Add regression curve
+    geom_smooth(method = "loess", colour = "red", se = FALSE, size = 0.7, linetype = 2) + # Add regression curve
+    theme_bw()
+}
+
+cor_func <- function(data, mapping, method, ...){
+  x <- eval_data_col(data, mapping$x)
+  y <- eval_data_col(data, mapping$y)
+  
+  corr <- cor(x, y, method=method, use='complete.obs')
+  
+  ggally_text(
+    label = as.character(round(corr, 3)), 
+    mapping = aes(),
+    xP = 0.5, yP = 0.5,
+    color = 'black',
+    ...
+  ) +
+    theme_bw(base_line_size = 0)
+}
+
+# Creating the correlation matrix plot
+plot_matrix <- ggpairs(
+  cor_data %>%
+    select(-name) %>%
+    rename_with(~str_remove(.x, "mean_")),
+  lower = list(
+    continuous = wrap(scatter_reg_curve)
+  ),
+  diag = list(continuous = function(data, mapping, ...) {
+                  ggally_densityDiag(data = data, mapping = mapping) +
+                  theme_bw()}),
+  upper = list(continuous = wrap(cor_func, method = "pearson", size = 4, stars = FALSE)),
+  )
+
+# Display the plot
+plot_matrix
+
+ggsave(plot_matrix, filename = "plots/correlation_plot_matrix.png", height = 10, width = 10, dpi = 400)
+
+```
+
+## Modelling of lexical decision data
+
+```{r}
+czlex_summary_ldt <- czlex_summary_clmm_brms %>%
+  left_join(czlex_word_list_variables) %>%
+  left_join(czlex_ldt) %>%
+  drop_na()
+
+```
+
+```{r}
+rt_baseline0 <- czlex_summary_ldt %>%
+  lm(rt_intercept ~ zipf_frequency + old20 + nchar, data = .)
+
+rt_baseline0 %>%
+  summary()
+
+ols_vif_tol(rt_baseline0)
+
+```
+
+Step 1 baseline
+
+```{r}
+rt_baseline1 <- czlex_summary_ldt %>%
+  lm(rt_intercept ~ zipf_frequency + old20, data = .)
+
+rt_baseline1 %>%
+  summary()
+
+ols_vif_tol(rt_baseline1)
+
+```
+
+Step 2 psycholinguistic
+
+```{r}
+rt_model_mean <- czlex_summary_ldt %>%
+  select(rt_intercept, zipf_frequency, old20, mean_aoa, mean_imageability, mean_gender, mean_valence) %>%
+  mutate(valence_abs = abs(mean_valence),
+         gender_abs = abs(mean_gender)) %>%
+  rename(aoa = mean_aoa,
+         imageability = mean_imageability,
+         gender = mean_gender,
+         valence = valence_abs) %>%
+  lm(rt_intercept ~ zipf_frequency + old20 + aoa + imageability + gender + valence, data = .)
+
+anova(rt_baseline1, rt_model_mean)
+
+rt_model_mean %>%
+  summary()
+
+ols_vif_tol(rt_model_mean)
+
+```
+
+```{r}
+error_baseline0 <- czlex_summary_ldt %>%
+  lm(acc_intercept ~ zipf_frequency + old20 + nchar, data = .)
+
+error_baseline0 %>%
+  summary()
+
+ols_vif_tol(error_baseline0)
+
+```
+
+
+```{r}
+acc_baseline1 <- czlex_summary_ldt %>%
+  lm(acc_intercept ~ zipf_frequency + old20, data = .)
+
+acc_baseline1 %>%
+  summary()
+
+acc_model_mean <- czlex_summary_ldt %>%
+  select(acc_intercept, zipf_frequency, old20, mean_aoa, mean_imageability, mean_gender, mean_valence) %>%
+  mutate(valence_abs = abs(mean_valence),
+         gender_abs = abs(mean_gender)) %>%
+  rename(aoa = mean_aoa,
+         imageability = mean_imageability,
+         gender = mean_gender,
+         valence = valence_abs) %>%
+  lm(acc_intercept ~ zipf_frequency + old20 + aoa + imageability + gender + valence, data = .)
+
+anova(acc_baseline1, acc_model_mean)
+
+acc_model_mean %>%
+  summary()
+
+```
+
+```{r}
+rt_model_clmm <- czlex_summary_ldt %>%
+  select(rt_intercept, zipf_frequency, old20, mean_aoa, clmm_imageability, clmm_gender, clmm_valence) %>%
+  mutate(valence_abs = abs(clmm_valence),
+         gender_abs = abs(clmm_gender)) %>%
+  rename(aoa = mean_aoa,
+         imageability = clmm_imageability,
+         gender = clmm_gender,
+         valence = valence_abs) %>%
+  lm(rt_intercept ~ zipf_frequency + old20 + aoa + imageability + gender + valence, data = .)
+
+anova(rt_baseline1, rt_model_clmm)
+
+rt_model_clmm %>%
+  summary()
+
+acc_model_clmm <- czlex_summary_ldt %>%
+  select(acc_intercept, zipf_frequency, old20, mean_aoa, clmm_imageability, clmm_gender, clmm_valence) %>%
+  mutate(valence_abs = abs(clmm_valence),
+         gender_abs = abs(clmm_gender)) %>%
+  rename(aoa = mean_aoa,
+         imageability = clmm_imageability,
+         gender = clmm_gender,
+         valence = valence_abs) %>%
+  lm(acc_intercept ~ zipf_frequency + old20 + aoa + imageability + gender + valence, data = .)
+
+anova(acc_baseline1, acc_model_clmm)
+
+acc_model_clmm %>%
+  summary()
+
+```
+
+
+```{r}
+rt_model_brms <- czlex_summary_ldt %>%
+  select(rt_intercept, zipf_frequency, old20, mean_aoa, brms_imageability, brms_gender, brms_valence) %>%
+  mutate(valence_abs = abs(brms_valence),
+         gender_abs = abs(brms_gender)) %>%
+  rename(aoa = mean_aoa,
+         imageability = brms_imageability,
+         gender = brms_gender,
+         valence = valence_abs) %>%
+  lm(rt_intercept ~ zipf_frequency + old20 + aoa + imageability + gender + valence, data = .)
+
+anova(rt_baseline1, rt_model_brms)
+
+rt_model_brms %>%
+  summary()
+
+acc_model_brms <- czlex_summary_ldt %>%
+  select(acc_intercept, zipf_frequency, old20, mean_aoa, brms_imageability, brms_gender, brms_valence) %>%
+  mutate(valence_abs = abs(brms_valence),
+         gender_abs = abs(brms_gender)) %>%
+  rename(aoa = mean_aoa,
+         imageability = brms_imageability,
+         gender = brms_gender,
+         valence = valence_abs) %>%
+  lm(acc_intercept ~ zipf_frequency + old20 + aoa + imageability + gender + valence, data = .)
+
+anova(acc_baseline1, acc_model_brms)
+
+acc_model_brms %>%
+  summary()
+
+```
+
+
+```{r}
+ols_vif_tol(rt_model_clmm)
+ols_vif_tol(rt_model_brms)
+ols_vif_tol(acc_model_clmm)
+ols_vif_tol(acc_model_brms)
+
+```
+
+```{r}
+coeffs_full <- summ(rt_model_mean, confint = TRUE, scale = TRUE)$coeftable %>%
+  as.data.frame() %>%
+  rownames_to_column("predictor") %>%
+  mutate(model = "mean",
+         predicted = "RT") %>%
+  bind_rows(summ(rt_model_clmm, confint = TRUE, scale = TRUE)$coeftable %>%
+              as.data.frame() %>%
+              rownames_to_column("predictor") %>%
+              mutate(model = "clmm",
+                     predicted = "RT")) %>%
+  bind_rows(summ(rt_model_brms, confint = TRUE, scale = TRUE)$coeftable %>%
+              as.data.frame() %>%
+              rownames_to_column("predictor") %>%
+              mutate(model = "brms",
+                     predicted = "RT")) %>%
+  bind_rows(summ(acc_model_mean, confint = TRUE, scale = TRUE)$coeftable %>%
+              as.data.frame() %>%
+              rownames_to_column("predictor") %>%
+              mutate(model = "mean",
+                     predicted = "accuracy")) %>%
+  bind_rows(summ(acc_model_clmm, confint = TRUE, scale = TRUE)$coeftable %>%
+              as.data.frame() %>%
+              rownames_to_column("predictor") %>%
+              mutate(model = "clmm",
+                     predicted = "accuracy")) %>%
+  bind_rows(summ(acc_model_brms, confint = TRUE, scale = TRUE)$coeftable %>%
+              as.data.frame() %>%
+              rownames_to_column("predictor") %>%
+              mutate(model = "brms",
+                     predicted = "accuracy")) %>%
+  rename(`Standardised coefficient` = 2,
+         lower = `2.5%`,
+         upper = `97.5%`) %>%
+  mutate(predictor = ifelse(predictor == "zipf_frequency", "ZipfFreq",
+                ifelse(predictor == "valence", "valence abs",
+                       ifelse(predictor == "gender", "gender", predictor))),
+         predictor = factor(predictor, ordered = TRUE, levels = c("valence abs", "imageability", "gender", "aoa", "old20", "ZipfFreq")),
+         model = factor(model, ordered = TRUE, levels = c("mean", "clmm", "brms")),
+         predicted = factor(predicted, ordered = TRUE, levels = c("RT", "accuracy")))
+
+coeffs_full_plot <- coeffs_full %>%
+  filter(predictor != "(Intercept)") %>%
+  ggplot(aes(x = `Standardised coefficient`, y = predictor, colour = model)) +
+  geom_linerange(aes(xmin = lower, xmax = upper), size = 0.7, position = position_dodge(0.8)) +
+  geom_point(size = 0.7, shape = 21, fill = "white", position = position_dodge(0.8)) +
+  geom_vline(xintercept = 0, linetype = 2, linewidth = .25) +
+  scale_color_manual(values = c("#004488", "#BB5566", "#DDAA33")) +
+  facet_grid(~predicted, scales = "free") +
+  theme_bw() +
+  theme(legend.position = "top",
+        axis.title.y = element_blank())
+
+coeffs_full_plot
+
+ggsave(plot = coeffs_full_plot, "plots/coeffs_full_plot.png", height = 4, width = 8, dpi = 400)
+
+```
+
+
+```{r}
+czlex_summary_ldt <- czlex_summary_ldt %>%
+  mutate(valence_abs_mean = abs(mean_valence),
+         gender_abs_mean = abs(mean_gender),
+         valence_abs_clmm = abs(clmm_valence),
+         gender_abs_clmm = abs(clmm_gender),
+         valence_abs_brms = abs(brms_valence),
+         gender_abs_brms = abs(brms_gender))
+
+rt_baseline1 <- czlex_summary_ldt %>%
+  lm(rt_intercept ~ zipf_frequency + old20, data = .)
+
+rt_concreteness_models <- list(
+  mean_concreteness = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + mean_concreteness, data = .),
+  clmm_concreteness = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + clmm_concreteness, data = .),
+  brms_concreteness = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + brms_concreteness, data = .)
+)
+
+rt_concreteness_r2_tbl <- map_dfr(
+  rt_concreteness_models,
+  ~ summary(.x)$r.squared
+  ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2") %>%
+  left_join(map_dfr(
+    rt_concreteness_models,
+    ~ summary(.x)$adj.r.squared
+    ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2 adj")) %>%
+  mutate(
+    baseline_R2 = summary(rt_baseline1)$adj.r.squared,
+    delta_R2 = `R2 adj` - baseline_R2
+  )
+
+rt_gender_models <- list(
+  mean_gender = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + mean_gender, data = .),
+  clmm_gender = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + clmm_gender, data = .),
+  brms_gender = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + brms_gender, data = .)
+)
+
+rt_gender_r2_tbl <- map_dfr(
+  rt_gender_models,
+  ~ summary(.x)$r.squared
+  ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2") %>%
+  left_join(map_dfr(
+    rt_gender_models,
+    ~ summary(.x)$adj.r.squared
+    ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2 adj")) %>%
+  mutate(
+    baseline_R2 = summary(rt_baseline1)$adj.r.squared,
+    delta_R2 = `R2 adj` - baseline_R2
+  )
+
+rt_imageability_models <- list(
+  mean_imageability = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + mean_imageability, data = .),
+  clmm_imageability = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + clmm_imageability, data = .),
+  brms_imageability = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + brms_imageability, data = .)
+)
+
+rt_imageability_r2_tbl <- map_dfr(
+  rt_imageability_models,
+  ~ summary(.x)$r.squared
+  ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2") %>%
+  left_join(map_dfr(
+    rt_imageability_models,
+    ~ summary(.x)$adj.r.squared
+    ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2 adj")) %>%
+  mutate(
+    baseline_R2 = summary(rt_baseline1)$adj.r.squared,
+    delta_R2 = `R2 adj` - baseline_R2
+  )
+
+rt_valence_models <- list(
+  mean_valence = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + valence_abs_mean, data = .),
+  clmm_valence = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + valence_abs_clmm, data = .),
+  brms_valence = czlex_summary_ldt %>%
+    lm(rt_intercept ~ zipf_frequency + old20 + valence_abs_brms, data = .)
+)
+
+rt_valence_r2_tbl <- map_dfr(
+  rt_valence_models,
+  ~ summary(.x)$r.squared
+  ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2") %>%
+  left_join(map_dfr(
+    rt_valence_models,
+    ~ summary(.x)$adj.r.squared
+    ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2 adj")) %>%
+  mutate(
+    baseline_R2 = summary(rt_baseline1)$adj.r.squared,
+    delta_R2 = `R2 adj` - baseline_R2
+  )
+
+rt_r2_tbl <- rt_concreteness_r2_tbl %>%
+  bind_rows(rt_gender_r2_tbl) %>%
+  bind_rows(rt_imageability_r2_tbl) %>%
+  bind_rows(rt_valence_r2_tbl)
+
+```
+
+```{r}
+acc_baseline1 <- czlex_summary_ldt %>%
+  lm(acc_intercept ~ zipf_frequency + old20, data = .)
+
+acc_concreteness_models <- list(
+  mean_concreteness = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + mean_concreteness, data = .),
+  clmm_concreteness = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + clmm_concreteness, data = .),
+  brms_concreteness = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + brms_concreteness, data = .)
+)
+
+acc_concreteness_r2_tbl <- map_dfr(
+  acc_concreteness_models,
+  ~ summary(.x)$r.squared
+  ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2") %>%
+  left_join(map_dfr(
+    acc_concreteness_models,
+    ~ summary(.x)$adj.r.squared
+    ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2 adj")) %>%
+  mutate(
+    baseline_R2 = summary(acc_baseline1)$adj.r.squared,
+    delta_R2 = `R2 adj` - baseline_R2
+  )
+
+acc_gender_models <- list(
+  mean_gender = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + mean_gender, data = .),
+  clmm_gender = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + clmm_gender, data = .),
+  brms_gender = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + brms_gender, data = .)
+)
+
+acc_gender_r2_tbl <- map_dfr(
+  acc_gender_models,
+  ~ summary(.x)$r.squared
+  ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2") %>%
+  left_join(map_dfr(
+    acc_gender_models,
+    ~ summary(.x)$adj.r.squared
+    ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2 adj")) %>%
+  mutate(
+    baseline_R2 = summary(acc_baseline1)$adj.r.squared,
+    delta_R2 = `R2 adj` - baseline_R2
+  )
+
+acc_imageability_models <- list(
+  mean_imageability = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + mean_imageability, data = .),
+  clmm_imageability = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + clmm_imageability, data = .),
+  brms_imageability = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + brms_imageability, data = .)
+)
+
+acc_imageability_r2_tbl <- map_dfr(
+  acc_imageability_models,
+  ~ summary(.x)$r.squared
+  ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2") %>%
+  left_join(map_dfr(
+    acc_imageability_models,
+    ~ summary(.x)$adj.r.squared
+    ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2 adj")) %>%
+  mutate(
+    baseline_R2 = summary(acc_baseline1)$adj.r.squared,
+    delta_R2 = `R2 adj` - baseline_R2
+  )
+
+acc_valence_models <- list(
+  mean_valence = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + valence_abs_mean, data = .),
+  clmm_valence = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + valence_abs_clmm, data = .),
+  brms_valence = czlex_summary_ldt %>%
+    lm(acc_intercept ~ zipf_frequency + old20 + valence_abs_brms, data = .)
+)
+
+acc_valence_r2_tbl <- map_dfr(
+  acc_valence_models,
+  ~ summary(.x)$r.squared
+  ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2") %>%
+  left_join(map_dfr(
+    acc_valence_models,
+    ~ summary(.x)$adj.r.squared
+    ) %>%
+  pivot_longer(everything(), names_to = "predictor", values_to = "R2 adj")) %>%
+  mutate(
+    baseline_R2 = summary(acc_baseline1)$adj.r.squared,
+    delta_R2 = `R2 adj` - baseline_R2
+  )
+
+acc_r2_tbl <- acc_concreteness_r2_tbl %>%
+  bind_rows(acc_gender_r2_tbl) %>%
+  bind_rows(acc_imageability_r2_tbl) %>%
+  bind_rows(acc_valence_r2_tbl)
+
+```
+
+```{r}
+r2_tbl <- rt_r2_tbl %>%
+  mutate(predicted = "RT") %>%
+  separate(predictor, sep = "_", into = c("model", "predictor")) %>%
+  bind_rows(acc_r2_tbl %>%
+              mutate(predicted = "accuracy") %>%
+              separate(predictor, sep = "_", into = c("model", "predictor"))) %>%
+  mutate(r2_label = paste0(" adj R\u00B2 = ", format(round(`R2 adj`, 3), nsmall = 3), ", ΔR\u00B2 = ", format(round(delta_R2, 3), nsmall = 3))) %>%
+  mutate(model = factor(model, ordered = TRUE, levels = c("mean", "clmm", "brms")),
+         predicted = factor(predicted, ordered = TRUE, levels = c("RT", "accuracy")))
+
+r2_full_plot <- r2_tbl %>%
+  ggplot(aes(x = baseline_R2, y = predictor, colour = model)) +
+  geom_linerange(data = r2_tbl,
+                  aes(xmin = baseline_R2, xmax = `R2 adj`), size = 0.7, position = position_dodge(0.8)) +
+  geom_point(size = 0.7, shape = 21, fill = "white", position = position_dodge(0.8)) +
+  geom_point(aes(x = `R2 adj`), size = 0.7, shape = 21, fill = "white", position = position_dodge(0.8)) +
+  geom_vline(aes(xintercept = baseline_R2), linetype = 2, linewidth = .25) +
+  geom_label(aes(x = `R2 adj`, label = r2_label), position = position_dodgenudge(width = 0.8, x = 0.01), size = 2.5, hjust = 0, border.colour = "white", show.legend = FALSE) +
+  geom_label(aes(x = baseline_R2-0.08, label = paste0("Baseline R\u00B2 = ", format(round(baseline_R2, 3), nsmall = 3)), colour = NULL), y = 2.5, text.colour = "black", size = 2.5, hjust = 0.5, angle = 270, border.colour = "white", show.legend = FALSE) +
+  scale_x_continuous(expand = expansion(mult = c(0.2, 1)), name = "Adjusted R\u00B2") +
+  scale_color_manual(values = c("#004488", "#BB5566", "#DDAA33")) +
+  facet_wrap(~predicted) +
+  theme_bw() +
+  theme(legend.position = "top",
+        axis.title.y = element_blank())
+
+r2_full_plot
+
+ggsave(plot = r2_full_plot, "plots/r2_full_plot.png", height = 4, width = 8, dpi = 400)
+
+```
+
+

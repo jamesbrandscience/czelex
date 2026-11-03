@@ -1,0 +1,434 @@
+---
+title: "CzeLex: A megastudy dataset of concreteness, imageability, age of acquisition, valence and gender ratings for 9,707 Czech words"
+subtitle: "Supplementary materials: _Preprocessing script_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    collapsed: false
+    df_print: paged
+    code_folding: show
+---
+
+<!-- set the colour scheme of the html file -->
+<style>
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    background-color: #95A044;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## System set-up: Packages, conflicts, session info
+
+```{r message=FALSE, warning=FALSE}
+#load in libraries, if not installed, please make sure you install using install.packages
+library(tidyverse)
+library(jsonlite)
+library(conflicted)
+
+#solve common issue with other packages using these function names
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+
+#check information about R session, this will give details of the R setup on the authors computer at the time of running. If any of the outputs are not reproduced as in the html file produced from this markdown document (see repository), there may be differences in the package versions or setup on your computer. You can update packages by running utils::update.packages()
+sessionInfo()
+
+```
+
+## load in data
+
+Please note that we cannot share the raw files that are being read here as they contain personally identifiable information such as email addressses. At the end of this file, we will have all the data in an anonymised and useable format.
+
+```{r message=FALSE}
+############
+#main norms
+############
+
+#load in the raw data from the czlex_norming_raw folder
+system.time(
+  czlex_norming <- list.files(path = "data/norms_LABELS/", pattern = ".csv", recursive = TRUE, full.names = TRUE) %>%
+    map_df(~read_csv(.x, show_col_types = FALSE) %>%
+             mutate(across(.cols = everything(), .fns = as.character)) %>%
+             mutate(ID = .x)) %>%
+    type_convert()
+)
+
+
+##################
+# demographics
+##################
+
+#make an object with the final participant list - filter out non-native Czech speakers and anybody with reading impairment, also anybody who did not complete the whole experiment
+czlex_norming_participants <- czlex_norming %>%
+  group_by(subject) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  filter(n > 10) %>%
+  mutate(Progress = ifelse(n == 11, 93, 100)) %>%
+  left_join(czlex_norming %>%
+              filter(trial_type1 == "demographics1") %>%
+              select(subject, response) %>%
+              mutate(response = map(response, ~ fromJSON(.) %>% as.data.frame())) %>%
+              unnest(response))
+
+#filter the raw data to include only the final participants
+czlex_norming_filtered <- czlex_norming %>%
+  filter(subject %in% czlex_norming_participants$subject)
+
+# get all the demographic data for the participants
+czlex_norming_participants_demographics <- czlex_norming_filtered %>%
+  filter(trial_type1 == "demographics1") %>%
+  select(subject, response) %>%
+  mutate(response = map(response, ~ fromJSON(.) %>% as.data.frame())) %>%
+  unnest(response) %>%
+  left_join(czlex_norming_filtered %>%
+              filter(trial_type1 == "feedback") %>%
+              select(subject, response) %>%
+              mutate(response = map(response, ~ fromJSON(.) %>% as.data.frame())) %>%
+              unnest(response)) %>%
+  mutate(gender_scale = as.numeric(gender_scale),
+         Věk = as.numeric(Věk),
+         L2_language = as.numeric(L2_language),
+         noiselevel = as.numeric(noiselevel),
+         subject = as.character(subject)) %>%
+  left_join(czlex_norming_participants %>%
+              mutate(subject = as.character(subject)) %>%
+              select(subject, Progress))
+
+# #write the demographics file to a csv
+# czlex_norming_participants_demographics %>%
+  # write_delim("demographics/czlex_norms_demographics.csv", ",")
+
+
+###############
+# rating data
+###############
+
+#convert all the raw data to long format
+czlex_norming_filtered_long <- czlex_norming_filtered %>%
+  filter(trial_type1 == "ratings_valence") %>%
+  select(subject, response, word_list1) %>%
+  mutate(response = map(response, ~ fromJSON(.) %>% as_tibble())) %>%
+  unnest(response) %>%
+  pivot_longer(c(-subject, -word_list1), values_drop_na = TRUE) %>%
+  mutate(dimension = "valence") %>%
+  bind_rows(czlex_norming_filtered %>%
+              filter(trial_type1 == "ratings_gender") %>%
+              select(subject, response, word_list1) %>%
+              mutate(response = map(response, ~ fromJSON(.) %>% as_tibble())) %>%
+              unnest(response) %>%
+              pivot_longer(c(-subject, -word_list1), values_drop_na = TRUE) %>%
+              mutate(dimension = "gender")) %>%
+  bind_rows(czlex_norming_filtered %>%
+              filter(trial_type1 == "ratings_concreteness") %>%
+              select(subject, response, word_list1) %>%
+              mutate(response = map(response, ~ fromJSON(.) %>% as_tibble())) %>%
+              unnest(response) %>%
+              pivot_longer(c(-subject, -word_list1), values_drop_na = TRUE) %>%
+              mutate(dimension = "concreteness")) %>%
+  bind_rows(czlex_norming_filtered %>%
+              filter(trial_type1 == "ratings_imageability") %>%
+              select(subject, response, word_list1) %>%
+              mutate(response = map(response, ~ fromJSON(.) %>% as_tibble())) %>%
+              unnest(response) %>%
+              pivot_longer(c(-subject, -word_list1), values_drop_na = TRUE) %>%
+              mutate(dimension = "imageability")) %>%
+  bind_rows(czlex_norming_filtered %>%
+              filter(trial_type1 == "ratings_aoa") %>%
+              select(subject, response, word_list1) %>%
+              mutate(response = map(response, ~ fromJSON(.) %>% as_tibble())) %>%
+              unnest(response) %>%
+              pivot_longer(c(-subject, -word_list1), values_drop_na = TRUE) %>%
+              mutate(dimension = "aoa")) %>%
+  left_join(read_csv("data/word_lists_final.csv") %>%
+              rename(name = word,
+                     word_list2 = list1)) %>%
+  mutate(value1 = ifelse(value %in% c("unknown", "unkown", "", "111"), NA, value),
+         unknown = ifelse(value == "unknown", 1, 0),
+         value1 = as.numeric(value1),
+         value1 = ifelse(value1 > 30, NA, value1),
+         subject = as.character(subject),
+         word_list = ifelse(str_length(as.character(word_list2)) == 1, paste0("00", word_list2), paste0("0", word_list2))) %>%
+  filter(subject %in% czlex_norming_participants_demographics$subject)
+
+################
+#sociolex wordlists
+################
+
+#note this data was collected before the czlex data, it was collected using Qualtrics, so the file formats differ
+filenames <- list.files(path = "data/PRIMUS_data/data/")
+
+awl_data <- tibble()
+awl_demographic <- tibble()
+
+for (i in filenames) {
+  
+  awl_data2 <- read_csv(paste0("data/PRIMUS_data/data/", i), skip = 1) %>%
+    slice(-1) %>%
+    rename(participant_feedback = which(str_starts(colnames(.), "To je ")))
+  
+  awl_data1a <- awl_data2 %>%
+    select(-`IMAGEABILITY - orel`:-participant_feedback) %>%
+    select(-starts_with("Timing")) %>%
+    rename(participant_email_address = 18,
+           participant_gender_category = 24,
+           participant_gender_category_other = 25,
+           participant_gender_scale = 26,
+           participant_age = 28,
+           participant_language = 29,
+           participant_language_other = 30,
+           participant_education = 31,
+           participant_political_scale = 32,
+           participant_optimism_scale = 33,
+           participant_location_scale = 34,
+           duration = 6,
+           Response_ID = 9,
+           participant_start_time = 1) %>%
+    mutate(survey_version = i)
+  
+  awl_data1 <- awl_data2 %>%
+    rename(Response_ID = `Response ID`) %>%
+    select(Response_ID, `IMAGEABILITY - orel`:participant_feedback) %>%
+    select(-starts_with("Timing"), -participant_feedback) %>%
+    pivot_longer(-Response_ID)
+  
+  awl_data <<- bind_rows(awl_data, awl_data1)
+  awl_demographic <<- bind_rows(awl_demographic, awl_data1a)
+  
+}
+
+# setwd("/Users/james/Library/CloudStorage/OneDrive-EdgeHillUniversity/PRIMUS/PRIMUS_data/PRIMUS_AWL_data/data1")
+
+filenames <- list.files(path = "data/PRIMUS_data/data1/")
+filenames
+
+awl_data_other <- tibble()
+awl_demographic_other <- tibble()
+
+for (i in filenames) {
+  
+  awl_data2 <- read_csv(paste0("data/PRIMUS_data/data1/", i), skip = 1) %>%
+    slice(-1) %>%
+    rename(participant_feedback = which(str_starts(colnames(.), "To je ")))
+  
+  awl_data1a <- awl_data2 %>%
+    select(-`IMAGEABILITY - orel`:-participant_feedback) %>%
+    select(-starts_with("Timing")) %>%
+    rename(participant_email_address = 18,
+           participant_gender_category = 24,
+           participant_gender_category_other = 25,
+           participant_gender_scale = 26,
+           participant_age = 28,
+           participant_language = 29,
+           participant_language_other = 30,
+           participant_education = 31,
+           participant_political_scale = 32,
+           participant_optimism_scale = 33,
+           participant_location_scale = 34,
+           duration = 6,
+           Response_ID = 9,
+           participant_start_time = 1) %>%
+    mutate(survey_version = i)
+  
+  awl_data1 <- awl_data2 %>%
+    rename(Response_ID = `Response ID`) %>%
+    select(Response_ID, `IMAGEABILITY - orel`:participant_feedback) %>%
+    select(-starts_with("Timing"), -participant_feedback) %>%
+    pivot_longer(-Response_ID)
+  
+  awl_data_other <<- bind_rows(awl_data_other, awl_data1)
+  awl_demographic_other <<- bind_rows(awl_demographic_other, awl_data1a)
+  
+}
+
+#demographics
+awl_demographic_all <- awl_demographic %>%
+  bind_rows(awl_demographic_other) %>%
+  mutate(Progress = as.numeric(Progress),
+         participant_gender_category = ifelse(participant_gender_category == "jiné (prosím upřesněte níže)", "Nebinární", str_to_sentence(participant_gender_category)),
+         participant_gender_scale = ifelse(participant_gender_scale == "typická žena 3", 7,
+                                           ifelse(participant_gender_scale == "typická žena 2", 6,
+                                                  ifelse(participant_gender_scale == "typická žena 1", 5,
+                                                         ifelse(participant_gender_scale == "neutralní", 4,
+                                                                ifelse(participant_gender_scale == "typický muž 1", 3,
+                                                                       ifelse(participant_gender_scale == "typický muž 2", 2,
+                                                                              ifelse(participant_gender_scale == "typický muž 3", 1, -999
+                                                                              ))))))),
+         participant_language = ifelse(participant_language == "čeština", "Čeština", "další"),
+         survey_version = str_remove(survey_version, "_November.*")) %>%
+  filter(Progress > 90) %>%
+  rename(subject = Response_ID,
+         gender = participant_gender_category,
+         gender_scale = participant_gender_scale,
+         education = participant_education,
+         age = participant_age,
+         language = participant_language,
+         language1 = participant_language_other,
+         list = survey_version) %>%
+  select(subject, gender, gender_scale, age, language, language1, list, Progress)
+
+#rating data
+awl_data_long <- awl_data %>%
+  bind_rows(awl_data_other) %>%
+  filter(!str_starts(name, "AOA")) %>%
+  separate(name, into = c("dimension", "name"), sep = " - ") %>%
+  mutate(value = ifelse(value == "Toto slovo neznám", "Toto slovo neznám",
+                        ifelse(!str_detect(value, "_"), str_sub(value, -1, -1), value)),
+         value = ifelse(value == "IM_d4LDVoT3aymQyd8", 1,
+                        ifelse(value == "IM_ag8a3QEwz5Xl9Nc", 2,
+                               ifelse(value == "IM_78MP5zgK9S7NQNw", 3,
+                                      ifelse(value == "IM_e4eZzCrZYpmKjDE", 4,
+                                             ifelse(value == "IM_bCUwqdnHQzDg902", 5, value))))),
+         value = ifelse(value == "Toto slovo neznám", "unknown", value),
+         dimension = tolower(dimension),
+         value = ifelse(value == "\n", 7, value)) %>%
+  rename(subject = Response_ID) %>%
+  filter(dimension != "arousal") %>%
+  filter(subject %in% awl_demographic_all$subject)
+
+#aoa ratings
+awl_data_aoa <- awl_data %>%
+  bind_rows(awl_data_other) %>%
+  filter(str_detect(name, "AOA#1")) %>%
+  mutate(name = str_sub(name, 15, -7)) %>%
+  rename(aoa = value) %>%
+  mutate(aoa = str_remove_all(aoa, "[^0-9.-]"),
+         aoa = ifelse(aoa == "", NA, aoa),
+         aoa = as.numeric(as.character(aoa))) %>%
+  left_join(awl_data %>%
+              bind_rows(awl_data_other) %>%
+              filter(str_detect(name, "AOA#2")) %>%
+              mutate(name = str_sub(name, 15, -1)) %>%
+              rename(aoa_unknown = value)) %>%
+  mutate(aoa = ifelse(!is.na(aoa_unknown), NA, aoa)) %>%
+  rename(subject = Response_ID,
+         value = aoa) %>%
+  mutate(dimension = "aoa",
+         value = ifelse(!is.na(value), value,
+                        ifelse(aoa_unknown == "Toto slovo neznám", "unknown", value))) %>%
+  select(-aoa_unknown) %>%
+  filter(subject %in% awl_demographic_all$subject)
+
+###################
+#sociolex data - gender and valence
+###################
+
+sociolex_norms_data <- read_csv("data/Sociolex_norms/sociolex_ratings_words.csv") %>%
+  filter(dimension %in% c("gender", "valence"))
+
+sociolex_norms_demographics <- read_csv("data/Sociolex_norms/sociolex_demographics_words.csv") %>%
+  filter(Response_ID %in% sociolex_norms_data$Response_ID)
+
+```
+
+## Merge all data
+
+Create tibbles for the demographic and rating data that combines all of the data together.There is also a bit of tidyinging up of the variables for useability.
+
+```{r}
+czlex_norming_participants_demographics1 <- awl_demographic_all %>%
+  mutate(age = as.numeric(age)) %>%
+  select(subject, age, gender, gender_scale, language, language1, Progress) %>%
+  bind_rows(czlex_norming_participants_demographics %>%
+              rename(age = Věk) %>%
+              select(subject, age, gender, gender_scale, language, language1, Progress)) %>%
+  bind_rows(sociolex_norms_demographics %>%
+              rename(subject = Response_ID,
+                     age = participant_age,
+                     gender = participant_gender_category,
+                     gender_scale = participant_gender_scale,
+                     language = participant_language,
+                     language1 = participant_language_other) %>%
+              mutate(age = as.numeric(age),
+                     gender = ifelse(gender == "female", "Žena",
+                                     ifelse(gender == "male", "Muž",
+                                            ifelse(participant_gender_category_other %in% c("nebinární", "nonbinary", "Post-genderist"), "Nebinární", "Nechci"))),
+                     gender_scale = gender_scale + 4,
+                     language = ifelse(language == "Czech", "Čeština", "další")) %>%
+              select(subject, age, gender, gender_scale, language, language1, Progress)
+            ) %>%
+  mutate(gender = ifelse(gender == "Žena", "female",
+                                     ifelse(gender == "Muž", "male",
+                                            ifelse(gender == "Nebinární", "non-binary",
+                                                   ifelse(gender == "Nechci", "not disclosed", "xxx")))),
+         language = ifelse(language == "Čeština", "Czech", "other"))
+
+czlex_norming_filtered_long1 <- czlex_norming_filtered_long %>%
+  select(subject, dimension, name, value) %>%
+  bind_rows(awl_data_long %>%
+              bind_rows(awl_data_aoa) %>%
+              select(subject, dimension, name, value)) %>%
+  bind_rows(sociolex_norms_data %>%
+              rename(subject = Response_ID,
+                     name = item) %>%
+              mutate(value = ifelse(!is.na(value1), value1,
+                                    ifelse(value == "Toto slovo neznám", "unknown", "-999"))) %>%
+              select(subject, dimension, name, value)) %>%
+  mutate(value = ifelse(value == "", NA, value),
+         value = ifelse(value == "unkown", "unknown", value),
+         value = ifelse(is.na(value), "unknown", value))
+
+```
+
+## Give basic summary information about the data for reference
+
+Rating data
+
+```{r}
+glimpse(czlex_norming_filtered_long1)
+
+czlex_norming_filtered_long1 %>%
+  summarise(n_participants = n_distinct(subject),
+            n_items = n_distinct(name)) %>%
+  bind_cols(czlex_norming_filtered_long1 %>%
+              group_by(dimension) %>%
+              summarise(n = n()) %>%
+              pivot_wider(names_from = dimension, values_from = n, names_prefix = "n_"))
+
+czlex_norming_filtered_long1 %>%
+  group_by(name, dimension) %>%
+  summarise(n = n()) %>%
+  pivot_wider(names_from = dimension, values_from = n, names_prefix = "n_") %>%
+  left_join(czlex_norming_filtered_long1 %>%
+              mutate(value1 = ifelse(value == "unknown", 0, 1)) %>%
+              group_by(name, dimension) %>%
+              summarise(n_known = sum(value1)) %>%
+              pivot_wider(names_from = dimension, values_from = n_known, names_prefix = "n_known_"))
+
+```
+Demographic data
+
+```{r}
+glimpse(czlex_norming_participants_demographics1)
+
+czlex_norming_participants_demographics1 %>%
+  summarise(n_participants = n_distinct(subject),
+            min_age = min(age),
+            max_age = max(age),
+            median_age = median(age)) %>%
+  bind_cols(czlex_norming_participants_demographics1 %>%
+              group_by(gender) %>%
+              count() %>%
+              pivot_wider(names_from = gender, values_from = n, names_prefix = "n_"))
+
+```
+
+## Save the data
+
+We will now export the data so it can be used for filtering.
+
+```{r}
+write_excel_csv(czlex_norming_filtered_long1, "raw_unfiltered_data/czelex_raw_unfiltered_ratings_data.csv")
+saveRDS(czlex_norming_filtered_long1, "raw_unfiltered_data/czelex_raw_unfiltered_ratings_data.rds")
+
+write_excel_csv(czlex_norming_participants_demographics1, "raw_unfiltered_data/czelex_raw_unfiltered_demographic_data.csv")
+saveRDS(czlex_norming_participants_demographics1, "raw_unfiltered_data/czelex_raw_unfiltered_demographic_data.rds")
+
+```
+
+

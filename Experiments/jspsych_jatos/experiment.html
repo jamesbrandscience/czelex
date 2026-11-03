@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="cs">
+  <head>
+    <title>LABELS</title>
+    <script src="jatos.js"></script>
+    <script src="jspsych/jspsych.js"></script>
+    <script src="jspsych/plugin-html-keyboard-response.js"></script>
+    <script src="jspsych/plugin-html-button-response.js"></script>
+    <script src="jspsych/plugin-image-keyboard-response.js"></script>
+    <script src="jspsych/plugin-fullscreen.js"></script>
+    <script src="jspsych/plugin-browser-check.js"></script>
+    <script src="jspsych/plugin-instructions.js"></script>
+    <script src="jspsych/plugin-survey-html-form.js"></script>
+    <script src="jspsych/plugin-survey-html-form1.js"></script>
+    <script src="jspsych/plugin-survey-html-form1a.js"></script>
+
+    <script src="stimuli/json/mg_extension_items_json.js"></script>
+    <script src="stimuli/word_lists_all.js"></script>
+    <!-- <script src="stimuli/json/word_lists2.js"></script> -->
+    <script src="stimuli/valence_ratings.js"></script>
+    <script src="stimuli/gender_ratings.js"></script>
+    <script src="stimuli/concreteness_ratings.js"></script>
+    <script src="stimuli/imageability_ratings.js"></script>
+    <script src="stimuli/aoa_ratings.js"></script>
+
+    <script src="trials.js"></script>
+    <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css" />
+    <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.0.0-beta.2/css/bootstrap.css" rel="stylesheet" /> -->
+  </head>
+  <body></body>
+  <script>
+
+    /* initialize jsPsych */
+    var jsPsych = initJsPsych({
+      on_trial_finish: function(data) {
+        subjectID = jatos.studyResultId;
+        jsPsych.data.addProperties({
+        subject: subjectID
+        });
+        var resultDataStr = jsPsych.data.get().csv();
+        // jatos.submitResultData(resultDataStr, jatos.startNextComponent);
+        jatos.uploadResultFile(resultDataStr, "Id_" + subjectID +"_naming_trials.csv")
+    },
+      on_finish: function () {
+        subjectID = jatos.studyResultId;
+        jsPsych.data.addProperties({
+        subject: subjectID,
+        });
+        var resultDataStr = jsPsych.data.get().csv();
+        jatos.submitResultData(resultDataStr, jatos.startNextComponent);
+        jatos.uploadResultFile(resultDataStr, "Id_" + subjectID +"_naming_trials.csv")
+      }
+    });
+
+    /* create timeline */
+    var timeline = [];
+
+    var if_trial1 = {
+    type: jsPsychSurveyHtmlForm1a,
+    html: function(){
+
+    var browser1 = jsPsych.data.get().filter({trial_type1: 'browser'}).values()[0].browser;
+    var mobile1 = jsPsych.data.get().filter({trial_type1: 'browser'}).values()[0].mobile;
+
+    function mobile(){
+        if(mobile1 === true){
+          return "mobil"
+        } else {
+          return "stolní počítač/notebook"
+        }
+      };
+
+      function browser2(){
+          if(browser1 === "chrome"){
+            return "&#9989;"
+          } else {
+            return "&#10060;"
+          }
+        };
+
+      function mobile2(){
+        if(mobile1 === false){
+          return "&#9989;"
+        } else {
+          return "&#10060;"
+        }
+      };
+
+      return '<img src="https://sites.ff.cuni.cz/ucjtk/wp-content/uploads/sites/57/2020/11/Ustav_ceske%E2%95%A0%C3%BCho_jazyka_a_teorie_komunikace.svg" width="400" height="150" style="vertical-align:middle"><hr><div style="text-align: center; margin-right: 150px; margin-left: 150px; border-left: 6px solid #ccc!important; border-right: 6px solid #ccc!important; border-color: #ff0f0f!important; background-color: #ffc2c2!important;">Váš prohlížeč je: '+browser1+' '+browser2()+'<br/>Vaše zařízení je: '+mobile()+' '+mobile2()+'</div><p style="text-align: center; margin-right: 150px; margin-left: 150px;">Pro účast v tomto experimentu <b>nepoužívejte</b> mobilní telefon.<br/><br/>Experiment funguje spolehlivě na počítači (stolním či na notebooku) výhradně v prohlížeči Google Chrome. Prosíme, použijte právě tento prohlížeč. Pokud ho nemáte nainstalovaný, můžete si ho stáhnout zde: <a href="https://www.google.com/chrome/">https://www.google.com/chrome/</a><br/><br/></p>'
+    },
+    button_label: "Pokračovat",
+    data: {
+      trial_type1: 'invalid_device',
+      mnforce_type: 'invalid'
+      },
+      on_finish: function() {
+      window.location.replace("https://jatos.ff.cuni.cz/publix/SPsdvSDHNV5");
+  },
+  };
+
+  var if_node1 = {
+    timeline: [if_trial1],
+    conditional_function: function(){
+      var test1 = jsPsych.data.get().filter({trial_type1: 'browser'}).values()[0].mobile;
+      var test2 = jsPsych.data.get().filter({trial_type1: 'browser'}).values()[0].browser;
+
+      if(test1 === false && test2 === "chrome"){
+        return false;
+      } else {
+        return true;
+      }
+    }
+  };
+
+  var browser_test = {
+      timeline: [browser1, enter_fullscreen, browser1, if_node1]
+    };
+
+    var ratings_gender1 = {
+      type: jsPsychSurveyHtmlForm,
+      data: {trial_type1: "ratings_gender",
+             word_list1: word_list_selected_gender1},
+      button_label: 'Pokračovat',
+      preamble: '<img src="https://sites.ff.cuni.cz/ucjtk/wp-content/uploads/sites/57/2020/11/Ustav_ceske%E2%95%A0%C3%BCho_jazyka_a_teorie_komunikace.svg" width="400" height="150" style="vertical-align:middle"><hr><br/><br/><div style="text-align:left; margin-right: 150px; margin-left: 150px;"><h2>GENDER</h2>Míra, do jaké si to, co dané slovo znamená, spojujete s mužskostí či ženskostí. Zaškrtnout lze vždy jen jeden bod. Žádné ze slov nelze přeskočit.</div><br/><br/>',
+      html: ratings_gender
+    };
+
+    var ratings_valence1 = {
+      type: jsPsychSurveyHtmlForm,
+      data: {trial_type1: "ratings_valence",
+             word_list1: word_list_selected_valence1},
+      button_label: 'Pokračovat',
+      preamble: '<img src="https://sites.ff.cuni.cz/ucjtk/wp-content/uploads/sites/57/2020/11/Ustav_ceske%E2%95%A0%C3%BCho_jazyka_a_teorie_komunikace.svg" width="400" height="150" style="vertical-align:middle"><hr><br/><br/><div style="text-align:left; margin-right: 150px; margin-left: 150px;"><h2>EMOCE</h2>Pocit, který ve vás to, co dané slovo znamená, vyvolává. Zaškrtnout lze vždy jen jeden bod. Žádné ze slov nelze přeskočit.</div><br/><br/>',
+      html: ratings_valence
+    };
+
+    var ratings_concreteness1 = {
+      type: jsPsychSurveyHtmlForm,
+      data: {trial_type1: "ratings_concreteness",
+             word_list1: word_list_selected_concreteness1},
+      button_label: 'Pokračovat',
+      preamble: '<img src="https://sites.ff.cuni.cz/ucjtk/wp-content/uploads/sites/57/2020/11/Ustav_ceske%E2%95%A0%C3%BCho_jazyka_a_teorie_komunikace.svg" width="400" height="150" style="vertical-align:middle"><hr><br/><br/><div style="text-align:left; margin-right: 150px; margin-left: 150px;"><h2>KONKRÉTNOST</h2>Některá slova označují věci nebo činnosti, které lze přímo zakusit prostřednictvím některého z pěti smyslů. Jsou to slova konkrétní. Jiná slova pak označují něco, co smyslově přímo zakusit nemůžeme, ale co známe, protože to lze definovat dalšími slovy. To jsou slova abstraktní. Mnoho slov pak spadá někam mezi tyto dva extrémy, protože jejich význam do určité míry smyslově zakusit můžeme, ale zároveň nám v jejich pochopení pomáhá jazyk. Chceme po Vás, abyste u každého slova určili, nakolik je jeho význam konkrétní, a to za použití pětistupňové škály jdoucí od "abstraktní" po "konkrétní".<br/><br/>Konkrétním slovům přináleží vyšší hodnocení a označují něco reálně existujícího; s tím, co označují, můžete mít přímou zkušenost prostřednictvím smyslů (čich, chuť, hmat, sluch, zrak) a činností, které děláte. Nejsnáze lze vysvětlit význam takového slova tím, že na něco ukážete nebo něco předvedete (např. abyste někomu vysvětlili význam slova "sladký", řeknete mu, aby snědl trochu cukru; abyste někomu vysvětlili význam slova "skákat", vyskočíte nebo mu ukážete video, kde někdo skáče; abyste někomu vysvětlili význam slova "gauč", můžete na gauč ukázat nebo mu můžete ukázat fotku gauče).<br/><br/>Abstraktním slovům přináleží nižší hodnocení a označují něco, co nelze zakusit přímo prostřednictvím smyslů či činností. Význam těchto slov záleží na jazyku. Nejsnáze lze význam těchto slov vysvětlit prostřednictvím jiných slov (např. nelze nijak snadno předvést, co je to "spravedlnost";  můžeme ale vysvětlit význam tohoto slova za použití jiných slov, která tento význam alespoň částečně zachycují).</div><br/><br/>',
+      html: ratings_concreteness
+    };
+
+    var ratings_imageability1 = {
+      type: jsPsychSurveyHtmlForm,
+      data: {trial_type1: "ratings_imageability",
+             word_list1: word_list_selected_imageability1},
+      button_label: 'Pokračovat',
+      preamble: '<img src="https://sites.ff.cuni.cz/ucjtk/wp-content/uploads/sites/57/2020/11/Ustav_ceske%E2%95%A0%C3%BCho_jazyka_a_teorie_komunikace.svg" width="400" height="150" style="vertical-align:middle"><hr><br/><br/><div style="text-align:left; margin-right: 150px; margin-left: 150px;"><h2>PŘEDSTAVITELNOST</h2>Toto je sedmibodová škála představitelnosti, která zachycuje, jak snadno si lze představit to, co dané slovo označuje.<br/><br/>1 = To, co dané slovo označuje, si dokážu představit velmi těžko, 7 = To, co dané slovo označuje, si dokážu představit velmi snadno</div><br/><br/>',
+      html: ratings_imageability
+    };
+
+    var ratings_aoa1 = {
+      type: jsPsychSurveyHtmlForm,
+      data: {trial_type1: "ratings_aoa",
+             word_list1: word_list_selected_aoa1},
+      button_label: 'Pokračovat',
+      preamble: '<img src="https://sites.ff.cuni.cz/ucjtk/wp-content/uploads/sites/57/2020/11/Ustav_ceske%E2%95%A0%C3%BCho_jazyka_a_teorie_komunikace.svg" width="400" height="150" style="vertical-align:middle"><hr><br/><br/><div style="text-align:left; margin-right: 150px; margin-left: 150px;"><h2>VĚK OSVOJENÍ</h2>Věk osvojení slova je věk, kdy jste se dané slovo naučili. U každého slova zkuste prosím odhadnout, kdy jste si ho osvojili. Uveďte (v letech) věk, kdy jste se naučili jednotlivá slova v seznamu. <b>Postačí i pouhý odhad.</b> Tím, že "jste si slovo osvojili", se myslí, že jste porozuměli tomu, co dané slovo znamená, <b>aniž byste ho sami v mluveném či psaném projevu nutně používali.</b></div><br/><br/>',
+      html: ratings_aoa,
+      on_load: function() {
+        // Prevent form submission on Enter key press
+        const form = document.getElementById('aoa_ratings_table');
+        if (form) {
+            form.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                }
+            });
+        }
+    }
+    };
+
+    var last_instructions = {
+      type: jsPsychSurveyHtmlForm,
+      data: {trial_type1: "feedback"},
+      button_label: 'Odeslat výsledky',
+      html: function() {
+        var subjectID = jatos.studyResultId;
+
+        var preamble2_html = '<img src="https://sites.ff.cuni.cz/ucjtk/wp-content/uploads/sites/57/2020/11/Ustav_ceske%E2%95%A0%C3%BCho_jazyka_a_teorie_komunikace.svg" width="400" height="150" style="vertical-align:middle">'+
+        '</br><hr>'+
+        '<div style="text-align: center; margin-right: 150px; margin-left: 150px; border-left: 6px solid #ccc!important; border-right: 6px solid #ccc!important; border-color: #198754!important; background-color: #CAF9E3!important; padding: 0.01em 16px;">'+
+        'Vaše identifikační číslo pro tento experiment:</br>'+
+        subjectID+
+        '</div></br></br>'+
+        '<div><b>Náš experiment je u konce. Pro odeslání výsledků klikněte na tlačítko níže.</b></br></br>Doporučujeme Vám udělat si screenshot této obrazovky jako doklad o Vaší účasti.</br></br>Pokud máte k dotazníku jakékoli komentáře, můžete je vepsat do níže uvedeného pole.</br></br>'+
+        '<textarea id="feedback" name="feedback" rows="4" cols="50"/></textarea></div>'
+
+        return preamble2_html;
+    }
+    };
+
+
+    timeline.push(browser_test);
+    timeline.push(instructions1);
+    timeline.push(consent);
+    timeline.push(demographics1);
+
+    var ratings_all = {
+      timeline: jsPsych.randomization.sampleWithoutReplacement([
+        ratings_valence1,
+        ratings_gender1,
+        ratings_concreteness1,
+        ratings_imageability1
+      ]),
+    };
+
+    timeline.push(ratings_all);
+    timeline.push(ratings_aoa1);
+
+    timeline.push(last_instructions);
+
+    /* start the experiment */
+    jatos.onLoad(() => {
+      jatos.addAbortButton();
+      jsPsych.run(timeline);
+    });
+
+  </script>
+</html>

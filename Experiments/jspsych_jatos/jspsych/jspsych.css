@@ -1,0 +1,495 @@
+/*
+ * CSS for jsPsych experiments.
+ *
+ * This stylesheet provides minimal styling to make jsPsych
+ * experiments look polished without any additional styles.
+ */
+
+@import url(https://fonts.googleapis.com/css?family=Open+Sans:400italic,700italic,400,700);
+
+relative {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+input[type=text1] {
+  border: none;
+  border-bottom: 2px solid black;
+  font-size: 25px;
+  font-family: monospace;
+  line-height: 1.6;
+}
+
+/* Container holding jsPsych content */
+
+label {
+  float: left;
+  padding: 0 1em;
+  text-align: center;
+}
+
+table {
+  width: 80%;
+  border-collapse: collapse;
+  margin-right: 150px;
+  margin-left: 150px;
+}
+/* tr:nth-of-type(odd) {
+  background: #eee;
+} */
+td {
+  padding: 6px;
+  font-size: 12pt;
+  text-align: center;
+}
+th {
+  padding: 6px;
+  font-size: 12pt;
+  width: 100px;
+  background: #fff;
+  color: black;
+  font-weight: normal;
+  vertical-align: bottom;
+  text-align: center;
+  border-bottom: 2px solid  #9F1F41;
+}
+
+tbody tr:nth-child(odd) {
+  background-color: #F1F1F1;
+}
+
+label1 { display: block;
+  width: 100px;
+  text-align: center;}
+
+.outlined {
+  border-left: 2px solid  #9F1F41;
+}
+
+.outlined1 {
+  border-left: 2px solid  #9F1F41;
+  border-right: 2px solid  #9F1F41;
+}
+
+/* input[type='radio2']:after {
+        width: 15px;
+        height: 15px;
+        border-radius: 15px;
+        position: relative;
+        background-color: #d1d3d1;
+        display: inline-block;
+        visibility: visible;
+        border: 2px solid #9F1F41;
+    }
+
+    input[type='radio2']:checked:after {
+        width: 15px;
+        height: 15px;
+        border-radius: 15px;
+        top: -2px;
+        left: -1px;
+        position: relative;
+        background-color: #9F1F41;
+        display: inline-block;
+        visibility: visible;
+        border: 2px solid white;
+    } */
+
+/*
+Max width before this PARTICULAR table gets nasty
+This query will take effect for any screen smaller than 760px
+and also iPads specifically.
+*/
+@media
+only screen and (max-width: 760px),
+(min-device-width: 768px) and (max-device-width: 1024px)  {
+
+	.responsive-table-input-matrix {
+		display: block;
+		position: relative;
+		width: 100%;
+
+		&:after {
+			clear: both;
+			content: '';
+			display: block;
+			font-size: 0;
+			height: 0;
+			visibility: hidden;
+		}
+
+		tbody {
+			display: block;
+			overflow-x: auto;
+			position: relative;
+			white-space: nowrap;
+			width: auto;
+
+
+			tr {
+				display: inline-block;
+				vertical-align: top;
+
+				td {
+					display: block;
+					text-align: center;
+
+					&:first-child {
+						text-align: left;
+					}
+				}
+			}
+		}
+
+		thead {
+			display: block;
+			float: left;
+			margin-right: 10px;
+
+			&:after {
+				clear: both;
+				content: "";
+				display: block;
+				font-size: 0;
+				height: 0;
+				visibility: hidden;
+			}
+
+			th:first-of-type {
+				height: 1.4em;
+			}
+
+			th {
+				display: block;
+				text-align: right;
+
+				&:first-child {
+					text-align: right;
+				}
+			}
+		}
+	}
+}
+
+.div {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.jspsych-display-element {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.jspsych-display-element:focus {
+  outline: none;
+}
+
+.jspsych-content-wrapper {
+  display: flex;
+  margin: auto;
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.jspsych-content {
+  max-width: 95%; /* this is mainly an IE 10-11 fix */
+  text-align: center;
+  margin: auto; /* this is for overflowing content */
+}
+
+.jspsych-top {
+  align-items: flex-start;
+}
+
+.jspsych-middle {
+  align-items: center;
+}
+
+/* fonts and type */
+
+.jspsych-display-element {
+  font-family: "Open Sans", "Arial", sans-serif;
+  font-size: 18px;
+  line-height: 1.6em;
+}
+
+/* Form elements like input fields and buttons */
+
+.jspsych-display-element input[type="text"] {
+  font-family: "Open Sans", "Arial", sans-serif;
+  font-size: 14px;
+}
+
+/* borrowing Bootstrap style for btn elements, but combining styles a bit */
+.jspsych-btn {
+  display: inline-block;
+  padding: 6px 12px;
+  margin: 0px;
+  font-size: 18px;
+  font-weight: 400;
+  font-family: "Open Sans", "Arial", sans-serif;
+  cursor: pointer;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+  background-image: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #333;
+  background-color: #fff;
+  border-color: #ccc;
+}
+
+/* borrowing Bootstrap style for btn elements, but combining styles a bit */
+.jspsych-btn1 {
+  background-color: #4CAF50;
+  border: none;
+  color: white;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  margin-left:auto;
+  margin-right:auto;
+  display:block;
+  margin-top:2%;
+  margin-bottom:0%;
+  font-weight: 400;
+  font-family: "Open Sans", "Arial", sans-serif;
+  cursor: pointer;
+  line-height: 1.4;
+  white-space: nowrap
+}
+
+/* only apply the hover style on devices with a mouse/pointer that can hover - issue #977 */
+@media (hover: hover) {
+  .jspsych-btn:hover {
+    background-color: #ddd;
+    border-color: #aaa;
+  }
+}
+
+.jspsych-btn:active {
+  background-color: #ddd;
+  border-color: #000000;
+}
+
+.jspsych-btn:disabled {
+  background-color: #eee;
+  color: #aaa;
+  border-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* .jspsych-btn1:hover {
+  background-color: #ddd;
+  border-color: #aaa;
+}
+}
+
+.jspsych-btn1:active {
+background-color: #ddd;
+border-color: #000000;
+}
+
+.jspsych-btn1:disabled {
+background-color: #eee;
+color: #aaa;
+border-color: #ccc;
+cursor: not-allowed;
+} */
+
+/* custom style for input[type="range] (slider) to improve alignment between positions and labels */
+
+.jspsych-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  background: transparent;
+}
+.jspsych-slider:focus {
+  outline: none;
+}
+/* track */
+.jspsych-slider::-webkit-slider-runnable-track {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 8px;
+  cursor: pointer;
+  background: #eee;
+  box-shadow: 0px 0px 0px #000000, 0px 0px 0px #0d0d0d;
+  border-radius: 2px;
+  border: 1px solid #aaa;
+}
+.jspsych-slider::-moz-range-track {
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  cursor: pointer;
+  background: #eee;
+  box-shadow: 0px 0px 0px #000000, 0px 0px 0px #0d0d0d;
+  border-radius: 2px;
+  border: 1px solid #aaa;
+}
+.jspsych-slider::-ms-track {
+  appearance: none;
+  width: 99%;
+  height: 14px;
+  cursor: pointer;
+  background: #eee;
+  box-shadow: 0px 0px 0px #000000, 0px 0px 0px #0d0d0d;
+  border-radius: 2px;
+  border: 1px solid #aaa;
+}
+/* thumb */
+.jspsych-slider::-webkit-slider-thumb {
+  border: 1px solid #666;
+  height: 24px;
+  width: 15px;
+  border-radius: 5px;
+  background: #ffffff;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -9px;
+}
+.jspsych-slider::-moz-range-thumb {
+  border: 1px solid #666;
+  height: 24px;
+  width: 15px;
+  border-radius: 5px;
+  background: #ffffff;
+  cursor: pointer;
+}
+.jspsych-slider::-ms-thumb {
+  border: 1px solid #666;
+  height: 20px;
+  width: 15px;
+  border-radius: 5px;
+  background: #ffffff;
+  cursor: pointer;
+  margin-top: -2px;
+}
+
+.likert {
+        --likert-rows: 5;
+        display: inline-grid;
+        max-width: 900px;
+        grid-auto-rows: 1fr;
+        gap: 1em;
+        grid-template-columns: repeat(var(--likert-rows), minmax(0, 1fr));
+    }
+
+    @media only screen and (max-width: 680px) {
+        .likert {
+            grid-template-columns: minmax(0, 400px);
+            justify-content: center;
+        }
+    }
+
+    .likert input {
+        max-width: 250px;
+        position: fixed;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+
+    .likert span {
+        border-radius: 5px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        background: #dcdcdc;
+        transition: background .2s ease-in-out;
+    }
+
+    .likert input:checked + span {
+        outline: black auto 1px;
+        background: transparent;
+    }
+
+    .likert input:focus + span {
+        outline: -webkit-focus-ring-color auto 1px;
+    }
+
+    .likert span:hover {
+        background: #f1f1f1;
+        outline: lightgrey auto 0.5px;
+    }
+
+/* jsPsych progress bar */
+
+#jspsych-progressbar-container {
+  color: #555;
+  border-bottom: 1px solid #dedede;
+  background-color: #f9f9f9;
+  margin-bottom: 1em;
+  text-align: center;
+  padding: 8px 0px;
+  width: 100%;
+  line-height: 1em;
+}
+#jspsych-progressbar-container span {
+  font-size: 14px;
+  padding-right: 14px;
+}
+#jspsych-progressbar-outer {
+  background-color: #eee;
+  width: 50%;
+  margin: auto;
+  height: 14px;
+  display: inline-block;
+  vertical-align: middle;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+#jspsych-progressbar-inner {
+  background-color: #aaa;
+  width: 0%;
+  height: 100%;
+}
+
+/* Control appearance of jsPsych.data.displayData() */
+#jspsych-data-display {
+  text-align: left;
+}
+
+
+input[type='radio'] {
+    -webkit-appearance:none;
+    width:20px;
+    height:20px;
+    border:2px solid darkgray;
+    border-radius:50%;
+    outline:none;
+    vertical-align: middle;
+}
+input[type='radio']:hover {
+    box-shadow:0 0 5px 0px orange inset;
+}
+input[type='radio']:before {
+    content:'';
+    display:block;
+    width:60%;
+    height:60%;
+    margin: 20% auto;
+    border-radius:50%;
+    vertical-align: middle;
+}
+input[type='radio']:checked:before {
+    background:#9F1F41;
+}

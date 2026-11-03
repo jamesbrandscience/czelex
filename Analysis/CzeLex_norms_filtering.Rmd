@@ -1,0 +1,462 @@
+---
+title: "CzeLex: A megastudy dataset of concreteness, imageability, age of acquisition, valence and gender ratings for 9,707 Czech words"
+subtitle: "_Supplementary materials: Filtering script_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    collapsed: false
+    df_print: paged
+    code_folding: show
+---
+
+<!-- set the colour scheme of the html file -->
+<style>
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    background-color: #95A044;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## System set-up: Packages, conflicts, session info
+
+```{r message=FALSE, warning=FALSE}
+#load in libraries, if not installed, please make sure you install using install.packages
+library(tidyverse)
+library(jsonlite)
+library(conflicted)
+
+#solve common issue with other packages using these function names
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+
+#check information about R session, this will give details of the R setup on the authors computer at the time of running. If any of the outputs are not reproduced as in the html file produced from this markdown document (see repository), there may be differences in the package versions or setup on your computer. You can update packages by running utils::update.packages()
+sessionInfo()
+
+```
+
+## load in data
+
+We will load in an unfiltered pre-processed version of the raw data. See CzeLex_norms_preproccessing.Rmd.
+
+```{r message=FALSE}
+czlex_norming_unfiltered <- read_rds("raw_unfiltered_data/czelex_raw_unfiltered_ratings_data.rds") %>%
+  mutate(value1 = ifelse(value == "unknown", NA, as.numeric(value)),
+         value_known = ifelse(is.na(value1), 0, 1)
+         )
+
+czlex_norming_unfiltered_demographics <- read_rds("raw_unfiltered_data/czelex_raw_unfiltered_demographic_data.rds")
+
+```
+
+Store the starting n rows and n participants.
+
+```{r}
+n_start <- czlex_norming_unfiltered %>%
+  nrow()
+
+n_ppt_start <- czlex_norming_unfiltered_demographics %>%
+  nrow()
+
+n_items_start <- czlex_norming_unfiltered %>%
+  summarise(n_items = n_distinct(name))
+
+n_start
+n_ppt_start
+n_items_start$n_items
+
+```
+
+## Filtering step 1: Native speakers
+
+We will first remove any participants who did not report being native Czech speakers.
+
+```{r}
+czlex_norming_unfiltered_demographics_czech <- czlex_norming_unfiltered_demographics %>%
+  filter(language == "Czech")
+
+czlex_norming_unfiltered_czech <- czlex_norming_unfiltered %>%
+  filter(subject %in% czlex_norming_unfiltered_demographics_czech$subject)
+
+czlex_norming_unfiltered_demographics_notczech <- czlex_norming_unfiltered_demographics %>%
+  filter(language != "Czech")
+
+czlex_norming_unfiltered_notczech <- czlex_norming_unfiltered %>%
+  filter(!subject %in% czlex_norming_unfiltered_demographics_czech$subject)
+
+#n rows lost
+n_lost_step_1 <- czlex_norming_unfiltered_notczech %>%
+  nrow()
+
+#n participants lost
+n_ppts_lost_step_1 <- czlex_norming_unfiltered_demographics_notczech %>%
+  nrow()
+
+cat("N rows lost: ", n_lost_step_1, "\n")
+cat("N ppts lost: ", n_ppts_lost_step_1, "\n")
+cat("N rows: ", czlex_norming_unfiltered_czech %>%
+      nrow(), "\n")
+cat("N ppts: ",czlex_norming_unfiltered_demographics_czech %>%
+      nrow(), "\n")
+
+```
+
+## Filtering step 2: Age
+
+We will remove any participants under 18, note this is likely due to a typo as the sample should have been university participants.
+
+```{r}
+czlex_norming_unfiltered_demographics_age <- czlex_norming_unfiltered_demographics_czech %>%
+  filter(age >= 18)
+
+czlex_norming_unfiltered_age <- czlex_norming_unfiltered_czech %>%
+  filter(subject %in% czlex_norming_unfiltered_demographics_age$subject)
+
+czlex_norming_unfiltered_demographics_notage <- czlex_norming_unfiltered_demographics_czech %>%
+  filter(age < 18)
+
+czlex_norming_unfiltered_notage <- czlex_norming_unfiltered_czech %>%
+  filter(!subject %in% czlex_norming_unfiltered_demographics_age$subject)
+
+#n rows lost
+n_lost_step_2 <- czlex_norming_unfiltered_notage %>%
+  nrow()
+
+#n participants lost
+n_ppts_lost_step_2 <- czlex_norming_unfiltered_demographics_notage %>%
+  nrow()
+
+cat("N rows lost: ", n_lost_step_2, "\n")
+cat("N ppts lost: ", n_ppts_lost_step_2, "\n")
+cat("N rows: ", czlex_norming_unfiltered_age %>%
+      nrow(), "\n")
+cat("N ppts: ",czlex_norming_unfiltered_demographics_age %>%
+      nrow(), "\n")
+
+```
+
+## Filtering step 3: Word knowledge
+
+We will remove any participants who had a proportion known across the items that was less than 80%, as this would not be indicative of the majority of the population being sampled, which was around 96%.
+
+```{r}
+czlex_norming_unfiltered_demographics_known1 <- czlex_norming_unfiltered_demographics_age %>%
+  left_join(czlex_norming_unfiltered_age %>%
+              group_by(subject, dimension) %>%
+              summarise(prop_known = mean(value_known)) %>%
+              ungroup()
+              ) %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension),
+         mean_prop_known = mean(prop_known)) %>%
+  filter(prop_known >= 0.75)
+
+czlex_norming_unfiltered_demographics_known <- czlex_norming_unfiltered_demographics_known1 %>%
+  select(-subject_dimension) %>%
+  pivot_wider(names_from = dimension, values_from = prop_known, names_prefix = "prop_known_")
+
+czlex_norming_unfiltered_known <- czlex_norming_unfiltered_age %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension)) %>%
+  filter(subject_dimension %in% czlex_norming_unfiltered_demographics_known1$subject_dimension)
+
+czlex_norming_unfiltered_demographics_notknown1 <- czlex_norming_unfiltered_demographics_age %>%
+  left_join(czlex_norming_unfiltered_age %>%
+              group_by(subject, dimension) %>%
+              summarise(prop_known = mean(value_known)) %>%
+              ungroup()
+              ) %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension)) %>%
+  filter(prop_known < 0.75)
+
+czlex_norming_unfiltered_demographics_notknown <- czlex_norming_unfiltered_demographics_notknown1 %>%
+  select(-subject_dimension) %>%
+  pivot_wider(names_from = dimension, values_from = prop_known, names_prefix = "prop_known_")
+
+czlex_norming_unfiltered_notknown <- czlex_norming_unfiltered_age %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension)) %>%
+  filter(!subject_dimension %in% czlex_norming_unfiltered_demographics_known1$subject_dimension)
+
+#n rows lost
+n_lost_step_3 <- czlex_norming_unfiltered_notknown %>%
+  nrow()
+
+#n participants lost
+n_ppts_lost_step_3 <- nrow(czlex_norming_unfiltered_demographics_age) - nrow(czlex_norming_unfiltered_demographics_known)
+
+n_ppts_affected_step_3 <- czlex_norming_unfiltered_demographics_notknown %>%
+  nrow()
+
+cat("N rows lost: ", n_lost_step_3, "\n")
+cat("N ppts lost: ", n_ppts_lost_step_3, "\n")
+cat("N ppts affected: ", n_ppts_affected_step_3, "\n")
+cat("N rows: ", czlex_norming_unfiltered_known %>%
+      nrow(), "\n")
+cat("N ppts: ",czlex_norming_unfiltered_demographics_known %>%
+      nrow(), "\n")
+
+```
+
+## Filtering step 4: Straightlining
+
+We will remove data from any participant who provided the same response on the rating scale for more than 95% of the items. This will be done based on individual dimensions,e.g. if a participant responded to all of the items with the neautral mid-point for valence, their data for valence will be removed.
+
+```{r}
+czlex_norming_unfiltered_demographics_straightlining1 <- czlex_norming_unfiltered_known %>%
+  group_by(subject, dimension, value) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(subject, dimension) %>%
+  mutate(n_values = n(),
+         sum = sum(n),
+         prop = n/sum) %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension)) %>%
+  slice_max(prop) %>%
+  ungroup() %>%
+  distinct(subject, dimension, subject_dimension, prop) %>%
+  filter(prop <= 0.95)
+
+czlex_norming_unfiltered_straightlining <- czlex_norming_unfiltered_known %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension)) %>%
+  filter(subject_dimension %in% czlex_norming_unfiltered_demographics_straightlining1$subject_dimension)
+
+czlex_norming_unfiltered_demographics_straightlining <- czlex_norming_unfiltered_demographics_known %>%
+  filter(subject %in% czlex_norming_unfiltered_straightlining$subject)
+
+czlex_norming_unfiltered_demographics_notstraightlining1 <- czlex_norming_unfiltered_known %>%
+  group_by(subject, dimension, value) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(subject, dimension) %>%
+  mutate(n_values = n(),
+         sum = sum(n),
+         prop = n/sum) %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension)) %>%
+  slice_max(prop) %>%
+  ungroup() %>%
+  distinct(subject, dimension, subject_dimension, prop) %>%
+  filter(prop > 0.95)
+
+czlex_norming_unfiltered_notstraightlining <- czlex_norming_unfiltered_known %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension)) %>%
+  filter(subject_dimension %in% czlex_norming_unfiltered_demographics_notstraightlining1$subject_dimension)
+
+czlex_norming_unfiltered_demographics_notstraightlining <- czlex_norming_unfiltered_demographics_known %>%
+  filter(subject %in% czlex_norming_unfiltered_notstraightlining$subject)
+
+#n rows lost
+n_lost_step_4 <- czlex_norming_unfiltered_notstraightlining %>%
+  nrow()
+
+#n participants lost
+n_ppts_lost_step_4 <- nrow(czlex_norming_unfiltered_demographics_known) - nrow(czlex_norming_unfiltered_demographics_straightlining)
+
+n_ppts_affected_step_4 <- czlex_norming_unfiltered_demographics_notstraightlining %>%
+  nrow()
+
+cat("N rows lost: ", n_lost_step_4, "\n")
+cat("N ppts lost: ", n_ppts_lost_step_4, "\n")
+cat("N ppts affected: ", n_ppts_affected_step_4, "\n")
+cat("N rows: ", czlex_norming_unfiltered_straightlining %>%
+      nrow(), "\n")
+cat("N ppts: ",czlex_norming_unfiltered_demographics_straightlining %>%
+      nrow(), "\n")
+
+```
+
+## Filtering step 5: Calibrator items
+
+We will remove data from any participant who responds in an 'opposite' way for the calibrator and control items within a dimension, e.g. if they respond to the item 'happy' as negative and 'bully' as positive for valence. This is done based on the participant's responses to that dimension, not across all of their data.
+
+```{r}
+calibrator_words <- tibble(dimension = c(rep("aoa", 2), rep("concreteness", 2), rep("gender", 2), rep("imageability", 2), rep("valence", 2)),
+                            name = c("pejsek", "federalismus", "teorie", "neoliberalismus", "náhrdelník", "otec", "orel", "chipsy", "šikanovat", "štěstí"),
+                           calibrator_control = rep(0:1, 5),
+                           value_min = c(0, 5, 1, 1, 0, -3, 4, 4, -3, 0),
+                           value_max = c(5, 40, 5, 5, 3, 0, 7, 7, 0, 3),
+                           calibrator = rep(TRUE, 10))
+
+czlex_norming_unfiltered_calibrator1 <- czlex_norming_unfiltered_straightlining %>%
+  left_join(calibrator_words) %>%
+  filter(calibrator == TRUE) %>%
+  mutate(value_odd = ifelse(value1 < value_min | value1 > value_max, 1, 0)) %>%
+  filter(value_odd == 1) %>%
+  group_by(subject, dimension) %>%
+  count() %>%
+  filter(n > 1) %>%
+  ungroup() %>%
+  mutate(subject_dimension = paste0(subject, "_", dimension))
+
+czlex_norming_unfiltered_calibrator <- czlex_norming_unfiltered_straightlining %>%
+  filter(!subject_dimension %in% czlex_norming_unfiltered_calibrator1$subject_dimension)
+
+czlex_norming_unfiltered_demographics_calibrator <- czlex_norming_unfiltered_demographics_straightlining %>%
+  filter(subject %in% czlex_norming_unfiltered_calibrator$subject)
+
+czlex_norming_unfiltered_notcalibrator <- czlex_norming_unfiltered_straightlining %>%
+  filter(subject_dimension %in% czlex_norming_unfiltered_calibrator1$subject_dimension)
+
+czlex_norming_unfiltered_demographics_notcalibrator <- czlex_norming_unfiltered_demographics_straightlining %>%
+  filter(subject %in% czlex_norming_unfiltered_notcalibrator$subject)
+
+#n rows lost
+n_lost_step_5 <- czlex_norming_unfiltered_notcalibrator %>%
+  nrow()
+
+#n participants lost
+n_ppts_lost_step_5 <- nrow(czlex_norming_unfiltered_demographics_straightlining) - nrow(czlex_norming_unfiltered_demographics_calibrator)
+
+n_ppts_affected_step_5 <- czlex_norming_unfiltered_demographics_notcalibrator %>%
+  nrow()
+
+cat("N rows lost: ", n_lost_step_5, "\n")
+cat("N ppts lost: ", n_ppts_lost_step_5, "\n")
+cat("N ppts affected: ", n_ppts_affected_step_5, "\n")
+cat("N rows: ", czlex_norming_unfiltered_calibrator %>%
+      nrow(), "\n")
+cat("N ppts: ",czlex_norming_unfiltered_demographics_calibrator %>%
+      nrow(), "\n")
+
+```
+
+## Filtering step 6: AoA data
+
+As the AoA data required a numeric response, there was the possibility that some responses were errors. We filtered this data on the following basis:
+
+- If a participant responded with an AoA value higher than their reported age, it would be removed at the item level.
+- If a participant responded with an AoA value that was smaller than 0, i.e. negative, it would be removed at the item level.
+- If a participant had more than 10 items that were affected by the above two conditions, all of their AoA data would be removed.
+
+```{r}
+czlex_norming_unfiltered_aoa1 <- czlex_norming_unfiltered_calibrator %>%
+  left_join(czlex_norming_unfiltered_demographics_calibrator %>%
+              select(subject, age)) %>%
+  mutate(aoa_outlier = ifelse(is.na(value1), 0,
+                              ifelse(dimension == "aoa" & value1 > age, 1, 0)),
+         aoa_outlier1 = ifelse(is.na(value1), 0,
+                               ifelse(dimension == "aoa" & value1 < 0, 1, 0)),
+         aoa_outlier2 = ifelse(aoa_outlier == 1 | aoa_outlier1 == 1, 1, 0)) %>%
+  group_by(subject, dimension) %>%
+  mutate(n_outlier = sum(aoa_outlier2))
+
+czlex_norming_unfiltered_aoa2 <- czlex_norming_unfiltered_aoa1 %>%
+  filter(n_outlier > 10) %>%
+  distinct(subject, dimension, subject_dimension, n_outlier)
+
+czlex_norming_unfiltered_aoa <- czlex_norming_unfiltered_calibrator %>%
+  left_join(czlex_norming_unfiltered_aoa1) %>%
+  filter(!subject_dimension %in% czlex_norming_unfiltered_aoa2$subject_dimension,
+         aoa_outlier2 == 0) %>%
+  select(-age:-n_outlier)
+
+czlex_norming_unfiltered_demographics_aoa <- czlex_norming_unfiltered_demographics_calibrator %>%
+  filter(subject %in% czlex_norming_unfiltered_aoa$subject)
+
+czlex_norming_unfiltered_notaoa <- czlex_norming_unfiltered_calibrator %>%
+  left_join(czlex_norming_unfiltered_aoa1) %>%
+  filter(subject_dimension %in% czlex_norming_unfiltered_aoa2$subject_dimension | aoa_outlier2 != 0)
+
+czlex_norming_unfiltered_demographics_notaoa <- czlex_norming_unfiltered_demographics_calibrator %>%
+  filter(subject %in% czlex_norming_unfiltered_notaoa$subject)
+
+#n rows lost
+n_lost_step_6 <- czlex_norming_unfiltered_notaoa %>%
+  nrow()
+
+#n participants lost
+n_ppts_lost_step_6 <- nrow(czlex_norming_unfiltered_demographics_calibrator) - nrow(czlex_norming_unfiltered_demographics_aoa)
+
+n_ppts_affected_step_6 <- czlex_norming_unfiltered_demographics_notaoa %>%
+  nrow()
+
+cat("N rows lost: ", n_lost_step_6, "\n")
+cat("N ppts lost: ", n_ppts_lost_step_6, "\n")
+cat("N ppts affected: ", n_ppts_affected_step_6, "\n")
+cat("N rows: ", czlex_norming_unfiltered_aoa %>%
+      nrow(), "\n")
+cat("N ppts: ",czlex_norming_unfiltered_demographics_aoa %>%
+      nrow(), "\n")
+
+```
+
+## Filtering step 7: Low N responses
+
+We removed data at the item level if the number of participants who provided a rating, i.e. did not choose unknown for the item, was less than 10. This was done on the basis of each individual dimension.
+
+```{r}
+czlex_norming_unfiltered_low1 <- czlex_norming_unfiltered_aoa %>%
+  mutate(name_dimension = paste0(name, "_", dimension)) %>%
+  left_join(czlex_norming_unfiltered_aoa %>%
+              group_by(name, dimension) %>%
+              summarise(n_ratings = n(),
+                        n_known_ratings = sum(value_known)) %>%
+              mutate(name_dimension = paste0(name, "_", dimension)) %>%
+              ungroup())
+
+czlex_norming_unfiltered_low <- czlex_norming_unfiltered_low1 %>%
+  filter(n_known_ratings >= 10)
+
+czlex_norming_unfiltered_demographics_low <- czlex_norming_unfiltered_demographics_aoa %>%
+  filter(subject %in% czlex_norming_unfiltered_low$subject)
+
+czlex_norming_unfiltered_notlow <- czlex_norming_unfiltered_low1 %>%
+  filter(n_known_ratings < 10)
+
+czlex_norming_unfiltered_demographics_notlow <- czlex_norming_unfiltered_demographics_aoa %>%
+  filter(!subject %in% czlex_norming_unfiltered_demographics_low$subject)
+
+#n rows lost
+n_lost_step_7 <- czlex_norming_unfiltered_notlow %>%
+  nrow()
+
+#n participants lost
+n_ppts_lost_step_7 <- nrow(czlex_norming_unfiltered_demographics_aoa) - nrow(czlex_norming_unfiltered_demographics_low)
+
+n_items_affected_step_7 <- czlex_norming_unfiltered_notlow %>%
+  distinct(name) %>%
+  nrow()
+
+cat("N rows lost: ", n_lost_step_7, "\n")
+cat("N ppts lost: ", n_ppts_lost_step_7, "\n")
+cat("N items affected: ", n_items_affected_step_7, "\n")
+cat("N rows: ", czlex_norming_unfiltered_low %>%
+      nrow(), "\n")
+cat("N ppts: ",czlex_norming_unfiltered_demographics_low %>%
+      nrow(), "\n")
+
+```
+
+## Final data
+
+```{r}
+czlex_norming_filtered <- czlex_norming_unfiltered_low %>%
+  select(subject:value_known)
+
+czlex_norming_filtered_demographics <- czlex_norming_unfiltered_demographics_low %>%
+  select(subject:gender_scale)
+
+cat("N rows: ", czlex_norming_filtered %>%
+      nrow(), "\n")
+cat("N ppts: ", czlex_norming_filtered_demographics %>%
+      nrow(), "\n")
+cat("N items: ", czlex_norming_filtered %>%
+      distinct(name) %>%
+      nrow(), "\n")
+
+```
+
+## Save the data
+
+We will now export the data so it can be used for filtering.
+
+```{r}
+write_excel_csv(czlex_norming_filtered, "raw_filtered_data/czelex_raw_filtered_ratings_data.csv")
+saveRDS(czlex_norming_filtered, "raw_filtered_data/czelex_raw_filtered_ratings_data.rds")
+
+write_excel_csv(czlex_norming_filtered_demographics, "raw_filtered_data/czelex_raw_filtered_demographic_data.csv")
+saveRDS(czlex_norming_filtered_demographics, "raw_filtered_data/czelex_raw_filtered_demographic_data.rds")
+
+```
