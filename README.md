@@ -1,6 +1,8 @@
-# CzeLex: A megastudy dataset of concreteness, imageability, age of acquisition, valence and gender ratings for 9,601 Czech words*
+# CzeLex: A megastudy dataset of concreteness, imageability, age of acquisition, valence and gender ratings for 9,601 Czech words
 
 This GitHub repository contains all relevant files related to the CzeLex dataset.
+
+The OSF can be found here: https://osf.io/tqxfm/
 
 The files structures are as follows:
 
